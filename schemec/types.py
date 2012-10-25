@@ -18,12 +18,13 @@ class VarExp:
         return str(self.val)
 
 class LamExp:
-    def __init__(self, var, bodyExp):
-        self.var = var
+    def __init__(self, vars, bodyExp):
+        self.vars = vars
         self.bodyExp = bodyExp
 
     def __repr__(self):
-        return '(lambda ({0}) {1})'.format(self.var, self.bodyExp)
+        return '(lambda ({0}) {1})'.format(' '.join(map(str, self.vars)),
+                                           self.bodyExp)
 
 class AppExp:
     def __init__(self, funcExp, argExp):
@@ -71,7 +72,7 @@ def T_k(exp, k):
         f = exp.funcExp
         e = exp.argExp
         _rv = gensym('$rv')
-        cont = LamExp(_rv, k(_rv))
+        cont = LamExp([_rv], k(_rv))
         return T_k(f, lambda _f:
                           T_k(e, lambda _e:
                                     AppExpC(_f, _e, cont)))
@@ -96,11 +97,10 @@ def M(exp):
     if isinstance(exp, VarExp):
         return exp
     elif isinstance(exp, LamExp):
-        var = exp.var
+        vars = exp.vars
         body = exp.bodyExp
         _k = gensym('$k')
-        rv = VarExp('rv')
-        return LamExp([var, _k], T_c(body,
-                                     lambda rv: AppExp(_k, rv)))
+        return LamExp(vars + [_k],
+                      T_c(body, _k))
     else:
         raise TypeError(exp)
