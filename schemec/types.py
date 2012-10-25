@@ -62,6 +62,36 @@ class GenSym:
         return VarExp(sym)
 gensym = GenSym()
 
+def T_k(exp, k):
+    if isinstance(exp, VarExp):
+        return k(M(exp))
+    elif isinstance(exp, LamExp):
+        return k(M(exp))
+    elif isinstance(exp, AppExp):
+        f = exp.funcExp
+        e = exp.argExp
+        _rv = gensym('$rv')
+        cont = LamExp(_rv, k(_rv))
+        return T_k(f, lambda _f:
+                          T_k(e, lambda _e:
+                                    AppExpC(_f, _e, cont)))
+    else:
+        raise TypeError(exp, k)
+
+def T_c(exp, c):
+    if isinstance(exp, VarExp):
+        return AppExp(c, M(exp))
+    elif isinstance(exp, LamExp):
+        return AppExp(c, M(exp))
+    elif isinstance(exp, AppExp):
+        f = exp.funcExp
+        e = exp.argExp
+        return T_k(f, lambda _f:
+                   T_k(e, lambda _e:
+                       AppExpC(_f, _e, c)))
+    else:
+        raise TypeError(exp, c)
+
 def M(exp):
     if isinstance(exp, VarExp):
         return exp
@@ -70,24 +100,7 @@ def M(exp):
         body = exp.bodyExp
         _k = gensym('$k')
         rv = VarExp('rv')
-        return LamExp([var, _k], T(body,
-                                   lambda rv: AppExp(_k, rv)))
+        return LamExp([var, _k], T_c(body,
+                                     lambda rv: AppExp(_k, rv)))
     else:
         raise TypeError(exp)
-
-def T(exp, k):
-    if isinstance(exp, LamExp):
-        return k(M(exp))
-    elif isinstance(exp, VarExp):
-        return k(M(exp))
-    elif isinstance(exp, AppExp):
-        f = exp.funcExp
-        e = exp.argExp
-        _rv = gensym('$rv')
-        cont = LamExp(_rv, k(_rv))
-        return T(f, lambda _f:
-                           T(e, lambda _e:
-                                       AppExpC(_f, _e, cont)))
-    else:
-        raise TypeError(exp, cont)
-
