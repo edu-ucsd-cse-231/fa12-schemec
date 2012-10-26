@@ -136,6 +136,11 @@ def T_k(exp, k):
         _rv = gensym('$rv')
         cont = LamExp([_rv], k(_rv))
         T_c(exp, cont)
+    elif isinstance(exp, IfExp):
+        ce = exp.condExp
+        te = exp.thenExp
+        ee = exp.elseExp
+        return T_k(ce, lambda _ce: IfExp(_ce, T_k(te, k), T_k(ee, k)))
     else:
         raise TypeError(exp)
 
@@ -156,7 +161,13 @@ def T_c(exp, c):
                    Tx_k(es, lambda _es:
                         AppExp(_f, *(_es + [c]))))
     elif isinstance(exp, IfExp):
-
+        ce = exp.condExp
+        te = exp.thenExp
+        ee = exp.elseExp
+        _k = gensym('$k')
+        return AppExp(LamExp([_k], T_k(ce, lambda _ce:
+                                       IfExp(_ce, T_c(te, _k), T_c(ee, _k)))),
+                             c)
     else:
         raise TypeError(exp)
 
@@ -200,3 +211,8 @@ if __name__ == '__main__':
                  BoolExp(False))
     print(exp)
     print(T_c(exp, VarExp('halt')))
+
+    exp = IfExp(IfExp(BoolExp(True), BoolExp(False), BoolExp(True)), NumExp(1), NumExp(0))
+    print(exp)
+    print(T_c(exp, VarExp('halt')))
+
