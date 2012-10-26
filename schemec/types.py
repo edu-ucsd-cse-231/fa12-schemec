@@ -10,7 +10,10 @@ from collections import namedtuple
 # AppExp = namedtuple('AppExp', 'funcExp, argExps')
 # IfExp  = namedtuple('IfExp',  'condExp, thenExp, elseExp')
 
-class VarExp:
+## Atomic Expressions
+class AtomicExp: pass
+
+class VarExp(AtomicExp):
     """A variable.
 
     @type name: String
@@ -22,7 +25,43 @@ class VarExp:
     def __repr__(self):
         return str(self.name)
 
-class LamExp:
+class NumExp(AtomicExp):
+    """A number.
+
+    @type val: Number
+    @param val: The value
+    """
+    def __init__(self, val):
+        self.val = val
+
+    def __repr__(self):
+        return str(self.val)
+
+class BoolExp(AtomicExp):
+    """A boolean.
+
+    @type val: Bool
+    @param val: The value
+    """
+    def __init__(self, val):
+        self.val = val
+
+    def __repr__(self):
+        return "#t" if self.val else "#f"
+
+class StrExp(AtomicExp):
+    """A string.
+
+    @type val: String
+    @param val: The value
+    """
+    def __init__(self, val):
+        self.val = val
+
+    def __repr__(self):
+        return '"{0}"'.format(self.val)
+
+class LamExp(AtomicExp):
     """A lambda expression.
 
     @type vars: A List of VarExps
@@ -38,6 +77,8 @@ class LamExp:
         return '(lambda ({0}) {1})'.format(' '.join(map(str, self.vars)),
                                            self.bodyExp)
 
+
+## More complex expressions
 class AppExp:
     """A lambda application.
 
@@ -81,21 +122,32 @@ class GenSym:
 gensym = GenSym()
 
 def T_k(exp, k):
-    if isinstance(exp, VarExp):
-        return k(M(exp))
-    elif isinstance(exp, LamExp):
+    """Transform an expression into CPS with a continuation lifted into the host
+    language.
+
+    @type exp: A Scheme expression
+    @param exp: The expression to transform
+    @type k: A *Python* function from SchemeExp -> SchemeExp
+    @param k: The continuation to apply
+    """
+    if isinstance(exp, AtomicExp):
         return k(M(exp))
     elif isinstance(exp, AppExp):
         _rv = gensym('$rv')
         cont = LamExp([_rv], k(_rv))
         T_c(exp, cont)
     else:
-        raise TypeError(exp, k)
+        raise TypeError(exp)
 
 def T_c(exp, c):
-    if isinstance(exp, VarExp):
-        return AppExp(c, M(exp))
-    elif isinstance(exp, LamExp):
+    """Transform an expression into CPS.
+
+    @type exp: A Scheme expression
+    @param exp: The expression to transform
+    @type k: LamExp
+    @param k: The continuation to apply
+    """
+    if isinstance(exp, AtomicExp):
         return AppExp(c, M(exp))
     elif isinstance(exp, AppExp):
         f = exp.funcExp
@@ -103,10 +155,17 @@ def T_c(exp, c):
         return T_k(f, lambda _f:
                    Tx_k(es, lambda _es:
                         AppExp(_f, *(_es + [c]))))
+    elif isinstance(exp, IfExp):
+
     else:
-        raise TypeError(exp, c)
+        raise TypeError(exp)
 
 def Tx_k(exps, k):
+    """Transform a list of expressions into CPS.
+
+    @type exps: A List of SchemeExps
+    @type k: LamExp
+    """
     if len(exps) == 0:
         return k([])
     else:
@@ -115,14 +174,18 @@ def Tx_k(exps, k):
                                    lambda tl: k([hd] + tl)))
 
 def M(exp):
-    if isinstance(exp, VarExp):
-        return exp
-    elif isinstance(exp, LamExp):
+    """Transform an AtomicExp into CPS.
+
+    @type exp: AtomicExp
+    """
+    if isinstance(exp, LamExp):
         vars = exp.vars
         body = exp.bodyExp
         _k = gensym('$k')
         return LamExp(vars + [_k],
                       T_c(body, _k))
+    elif isinstance(exp, AtomicExp):
+        return exp
     else:
         raise TypeError(exp)
 
@@ -133,7 +196,7 @@ def M(exp):
 
 if __name__ == '__main__':
     exp = AppExp(LamExp([VarExp('g'), VarExp('h')], VarExp('g')),
-                 VarExp('a'),
-                 VarExp('b'))
+                 BoolExp(True),
+                 BoolExp(False))
     print(exp)
     print(T_c(exp, VarExp('halt')))
