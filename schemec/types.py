@@ -5,19 +5,31 @@ from collections import namedtuple
 ## Scheme Expressions
 ################################################################################
 
-# VarExp = namedtuple('VarExp', 'val')
-# LamExp = namedtuple('LamExp', 'var, bodyExp')
-# AppExp = namedtuple('AppExp', 'funcExp, argExp')
+# VarExp = namedtuple('VarExp', 'name')
+# LamExp = namedtuple('LamExp', 'vars, bodyExp')
+# AppExp = namedtuple('AppExp', 'funcExp, argExps')
 # IfExp  = namedtuple('IfExp',  'condExp, thenExp, elseExp')
 
 class VarExp:
-    def __init__(self, val):
-        self.val = val
+    """A variable.
+
+    @type name: String
+    @param name: The name of the variable
+    """
+    def __init__(self, name):
+        self.name = name
 
     def __repr__(self):
-        return str(self.val)
+        return str(self.name)
 
 class LamExp:
+    """A lambda expression.
+
+    @type vars: A List of VarExps
+    @param vars: The formal parameters of the lambda
+    @type bodyExp: Any Scheme expression
+    @param bodyExp: The body of the lambda
+    """
     def __init__(self, vars, bodyExp):
         self.vars = vars
         self.bodyExp = bodyExp
@@ -27,6 +39,13 @@ class LamExp:
                                            self.bodyExp)
 
 class AppExp:
+    """A lambda application.
+
+    @type funcExp: Any Scheme expression
+    @param funcExp: The function being applied
+    @type argExps: A List of Scheme Expressions (not passed as a list though!)
+    @param argExps: The arguments to the function
+    """
     def __init__(self, funcExp, *argExps):
         self.funcExp = funcExp
         self.argExps = argExps
@@ -35,6 +54,19 @@ class AppExp:
         return '({0} {1})'.format(self.funcExp,
                                   ' '.join(map(str, self.argExps)))
 
+class IfExp:
+    """An if expression.
+
+    All three parameters can be any Scheme expression.
+    """
+    def __init__(self, condExp, thenExp, elseExp):
+        self.condExp = condExp
+        self.thenExp = thenExp
+        self.elseExp = elseExp
+
+    def __repr__(self):
+        return '(if {0} {1} {2})'.format(self.condExp, self.thenExp,
+                                         self.elseExp)
 
 ################################################################################
 ## Conversion to CPS
@@ -54,13 +86,6 @@ def T_k(exp, k):
     elif isinstance(exp, LamExp):
         return k(M(exp))
     elif isinstance(exp, AppExp):
-        # f = exp.funcExp
-        # es = exp.argExps
-        # _rv = gensym('$rv')
-        # cont = LamExp([_rv], k(_rv))
-        # return T_k(f, lambda _f:
-        #                   T_k(*es, lambda _e:
-        #                             AppExp(_f, _e, cont)))
         _rv = gensym('$rv')
         cont = LamExp([_rv], k(_rv))
         T_c(exp, cont)
