@@ -109,6 +109,25 @@ class IfExp:
         return '(if {0} {1} {2})'.format(self.condExp, self.thenExp,
                                          self.elseExp)
 
+class LetRecExp:
+    """A letrec expression.
+
+    @type varExp: A VarExp
+    @param varExp: The symbol to which the function will be bound
+    @type funcExp: A LamExp
+    @param funcExp: The recursive function
+    @type bodyExp: Any Scheme expression
+    @param bodyExp: The body of the LetRec expression
+    """
+    def __init__(self, varExp, funcExp, bodyExp):
+        self.varExp = varExp
+        self.funcExp = funcExp
+        self.bodyExp = bodyExp
+
+    def __repr__(self):
+        return '(letrec (({0} {1})) {2})'.format(self.varExp, self.funcExp,
+                                                 self.bodyExp)
+
 ################################################################################
 ## Conversion to CPS
 ################################################################################
@@ -135,7 +154,7 @@ def T_k(exp, k):
     elif isinstance(exp, AppExp):
         _rv = gensym('$rv')
         cont = LamExp([_rv], k(_rv))
-        T_c(exp, cont)
+        return T_c(exp, cont)
     elif isinstance(exp, IfExp):
         ce = exp.condExp
         te = exp.thenExp
@@ -149,8 +168,8 @@ def T_c(exp, c):
 
     @type exp: A Scheme expression
     @param exp: The expression to transform
-    @type k: LamExp
-    @param k: The continuation to apply
+    @type c: LamExp
+    @param c: The continuation to apply
     """
     if isinstance(exp, AtomicExp):
         return AppExp(c, M(exp))
@@ -168,6 +187,11 @@ def T_c(exp, c):
         return AppExp(LamExp([_k], T_k(ce, lambda _ce:
                                        IfExp(_ce, T_c(te, _k), T_c(ee, _k)))),
                              c)
+    elif isinstance(exp, LetRecExp):
+        ve = exp.varExp
+        fe = exp.funcExp
+        be = exp.bodyExp
+        return LetRecExp(ve, M(fe), T_c(be, c))
     else:
         raise TypeError(exp)
 
@@ -216,3 +240,17 @@ if __name__ == '__main__':
     print(exp)
     print(T_c(exp, VarExp('halt')))
 
+    exp = LetRecExp(VarExp('fact'), LamExp([VarExp('x')],
+                                           IfExp(AppExp(VarExp('='),
+                                                        VarExp('x'),
+                                                        NumExp(0)),
+                                                 NumExp(1),
+                                                 AppExp(VarExp('*'),
+                                                        VarExp('x'),
+                                                        AppExp(VarExp('fact'),
+                                                               AppExp(VarExp('-'),
+                                                                      VarExp('x'),
+                                                                      NumExp(1)))))),
+                    AppExp(VarExp('fact'), NumExp(5)))
+    print(exp)
+    print(T_c(exp, VarExp('halt')))
