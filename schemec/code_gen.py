@@ -8,6 +8,11 @@ class CodeGenerator():
         self.rv = VarExp('returnValue')
         self.vars = set([self.rv])
         self.gensym = GenSym()
+        self.primitives = { '+':'+',
+                            '-':'-',
+                            '*':'*',
+                            '=':'=='}
+        self.primFormat = "{0} = {1} {3} {2};\n"
     
     """
     Translates the given CPS expression into C
@@ -89,11 +94,22 @@ class CodeGenerator():
     @param exp: the variable to assign the result to
     """
     def appToC(self, exp, assignTo):
+        if self.isPrimitive(exp.funcExp):
+            a, b, c = [VarExp(self.gensym('_')) for i in range(3)]
+            code = self.argsToC([a,b], exp.argExps[:-1])
+            code += self.declareVar(c)
+            code += self.primFormat.format(c.name, a.name, b.name, self.primitives[exp.funcExp.name])
+            cont = AppExp(exp.argExps[-1],c)
+            return code + self.toC(cont, assignTo)
+        
         funcExp = self.lambdaBindings[exp.funcExp] if isinstance(exp.funcExp, VarExp) else exp.funcExp
         return ''.join([self.argsToC(funcExp.vars, exp.argExps), self.toC(funcExp, assignTo)])
     
+    def isPrimitive(self, funcExp):
+        return isinstance(funcExp, VarExp) and funcExp.name in self.primitives.keys()
+    
     """
-    Translates a list of arguments to C and assigns the results to respectiv variables.
+    Translates a list of arguments to C and assigns the results to respective variables.
     
     @type vars: a list of VarExp
     @param vars: the variables to assign the arguments to
@@ -143,7 +159,8 @@ if __name__ == '__main__':
                  #~ BoolExp(True),
                  #~ BoolExp(False))
                  
-    exp = IfExp(IfExp(BoolExp(True), BoolExp(False), BoolExp(True)), NumExp(1), NumExp(0))
+    #~ exp = IfExp(IfExp(BoolExp(True), BoolExp(False), BoolExp(True)), NumExp(1), NumExp(0))
+    exp = AppExp(VarExp('='), NumExp(1), NumExp(2))
     
     gen = CodeGenerator()
     cpsexp = T_c(exp, LamExp([gen.rv],gen.rv))
