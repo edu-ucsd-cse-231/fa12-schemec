@@ -128,6 +128,18 @@ class LetRecExp:
         return '(letrec (({0} {1})) {2})'.format(self.varExp, self.funcExp,
                                                  self.bodyExp)
 
+class BeginExp:
+    """A begin expression.
+
+    @type exps: A list of Scheme expressions
+    @param exps: The expressions contained within the `begin`
+    """
+    def __init__(self, exps):
+        self.exps = exps
+
+    def __repr__(self):
+        return '(begin {0})'.format(' '.join(self.exps))
+
 ################################################################################
 ## Conversion to CPS
 ################################################################################
@@ -160,6 +172,11 @@ def T_k(exp, k):
         te = exp.thenExp
         ee = exp.elseExp
         return T_k(ce, lambda _ce: IfExp(_ce, T_k(te, k), T_k(ee, k)))
+    elif isinstance(exp, LetRecExp):
+        ve = exp.varExp
+        fe = exp.funcExp
+        be = exp.bodyExp
+        return LetRecExp(ve, M(fe), T_k(be, k))
     else:
         raise TypeError(exp)
 
