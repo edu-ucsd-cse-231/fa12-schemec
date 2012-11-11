@@ -48,6 +48,15 @@ class BoolExp(AtomicExp):
 
     def __repr__(self):
         return "#t" if self.val else "#f"
+# these may be useful synonyms
+true = BoolExp(True)
+false = BoolExp(False)
+
+class VoidExp(AtomicExp):
+    """void/nil/etc..."""
+    def __repr__(self):
+        return '(void)'
+void = VoidExp()
 
 class StrExp(AtomicExp):
     """A string.
@@ -140,6 +149,40 @@ class BeginExp:
     def __repr__(self):
         return '(begin {0})'.format(' '.join(map(str, self.exps)))
 
+class SetExp:
+    """A set! expression.
+
+    @type varExp: A VarExp
+    @param varExp: The symbol to be rebound
+    @type exp: Any Scheme expression
+    @param exp: The new value to be bound to varExp
+    """
+    def __init__(self, varExp, exp):
+        self.varExp = varExp
+        self.exp = exp
+
+    def __repr__(self):
+        return '(set! {0} {1})'.format(self.varExp, self.exp)
+
+class SetThenExp:
+    """A set-then! expression.
+
+    @type varExp: A VarExp
+    @param varExp: The symbol to be rebound
+    @type exp: Any Scheme expression
+    @param exp: The new value to be bound to varExp
+    @type thenExp: Any Scheme expression
+    @param thenExp: The continuation to apply
+    """
+    def __init__(self, varExp, exp, thenExp):
+        self.varExp = varExp
+        self.exp = exp
+        self.thenExp = thenExp
+
+    def __repr__(self):
+        return '(set-then! {0} {1} {2})'.format(self.varExp, self.exp,
+                                                self.thenExp)
+
 ################################################################################
 ## Conversion to CPS
 ################################################################################
@@ -183,6 +226,10 @@ def T_k(exp, k):
             return T_k(es[0], k)
         else:
             return T_k(es[0], lambda _: T_k(BeginExp(*es[1:]), k))
+    elif isinstance(exp, SetExp):
+        ve = exp.varExp
+        ee = exp.exp
+        return T_k(ee, lambda _ee: SetThenExp(ve, _ee, k(void)))
     else:
         raise TypeError(exp)
 
@@ -221,6 +268,10 @@ def T_c(exp, c):
             return T_c(es[0], c)
         else:
             return T_k(es[0], lambda _: T_c(BeginExp(*es[1:]), c))
+    elif isinstance(exp, SetExp):
+        ve = exp.varExp
+        ee = exp.exp
+        return T_k(ee, lambda _ee: SetThenExp(ve, _ee, AppExp(c, void)))
     else:
         raise TypeError(exp)
 
@@ -284,8 +335,8 @@ if __name__ == '__main__':
     print(exp)
     print(T_c(exp, VarExp('halt')))
 
-    exp = BeginExp(AppExp(VarExp('display'), NumExp(1)),
-                   NumExp(2))
+    exp = BeginExp(SetExp(VarExp('x'), NumExp(1)),
+                   VarExp('x'))
     print(exp)
     print(T_k(exp, lambda x: AppExp(VarExp('halt'), x)))
     # print(T_c(exp, VarExp('halt')))
