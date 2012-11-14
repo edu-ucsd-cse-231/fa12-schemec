@@ -163,11 +163,15 @@ class LetRecExp:
     @type bodyExp: Any Scheme expression
     @param bodyExp: The body of the LetRec expression
     """
-    def __init__(self, varExp, funcExp, bodyExp):
-        self.varExp = varExp
-        self.funcExp = funcExp
+    def __init__(self, varFuncExps, bodyExp):
+        if isinstance(varFuncExps, AppExp):
+            varFuncExps = varFuncExps.tolist()
+        for i, expr in enumerate(varFuncExps):
+            if isinstance(expr, AppExp):
+                varFuncExps[i] = expr.tolist()
+        self.varFuncExps = varFuncExps
         self.bodyExp = bodyExp
 
     def __repr__(self):
-        return '(letrec (({0} {1})) {2})'.format(self.varExp, self.funcExp,
+        return '(letrec ({0}) {1})'.format(' '.join('({0} {1})'.format(v, f) for v, f in self.varFuncExps),
                                                  self.bodyExp)

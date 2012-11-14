@@ -61,10 +61,9 @@ def T_c(exp, c):
                                        IfExp(_ce, T_c(te, _k), T_c(ee, _k)))),
                              c)
     elif isinstance(exp, LetRecExp):
-        ve = exp.varExp
-        fe = exp.funcExp
+        vfes = exp.varFuncExps
         be = exp.bodyExp
-        return LetRecExp(ve, (M(fe), T_c(be, c)))
+        return LetRecExp([ve, M(fe) for ve, fe in vfes], T_c(be, c))
     else:
         raise TypeError(exp)
 
@@ -113,7 +112,7 @@ if __name__ == '__main__':
     print(exp)
     print(T_c(exp, VarExp('halt')))
 
-    exp = LetRecExp(VarExp('fact'), LamExp([VarExp('x')],
+    exp = LetRecExp([[VarExp('fact'), LamExp([VarExp('x')],
                                            IfExp(AppExp(VarExp('='),
                                                         VarExp('x'),
                                                         NumExp(0)),
@@ -123,7 +122,7 @@ if __name__ == '__main__':
                                                         AppExp(VarExp('fact'),
                                                                AppExp(VarExp('-'),
                                                                       VarExp('x'),
-                                                                      NumExp(1)))))),
+                                                                      NumExp(1))))))]],
                     AppExp(VarExp('fact'), NumExp(5)))
     print(exp)
     print(T_c(exp, VarExp('halt')))

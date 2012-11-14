@@ -21,9 +21,19 @@ from types import (
     )
 
 def error(msg):
+    """
+    throw an error message
+    @type msg: a string
+    @param msg: string containing the error message
+    """
     print('error:', msg, file=stderr)
 
 def unimplemented(expr):
+    """
+    throw an unimplemented error"
+    @type expr: a SExp or Token
+    @param expr: SExp or Token which we haven't implemented
+    """
     if isinstance(expr, SExp):
         error("unimplemented expression (line: {0}, col: {1}): '({2} ...)'".format(
                 expr.pos.line,
@@ -41,6 +51,13 @@ def unimplemented(expr):
     return None
 
 def wrong_nargs(narg, expr):
+    """
+    throw a wrong-number-of-arguments error
+    @type narg: an integer
+    @param narg: the correct number of arguments
+    @type expr: a SExp or Token
+    @param expr: the SExp or Token which threw the wrong # of args error
+    """
     error("incorrect number of arguments ({0} != {1}) supplied to '{2}' (line: {3}, col: {4})".format(
             len(expr) - 1,
             narg,
@@ -52,6 +69,11 @@ def wrong_nargs(narg, expr):
     return None
 
 def invalid_varname(expr):
+    """
+    throw an invalid variable name error
+    @type expr: a Token
+    @param expr: a token with an invalid val for variable naming
+    """
     error("invalid variable name '{0}' (line: {1}, col: {2})".format(
             expr.val,
             expr.pos.line,
@@ -67,14 +89,11 @@ def to_exp(expr):
         else:
             head = expr[0]
             tail = expr[1:]
+            rest = [to_exp(e) for e in tail]
             name = head.val
             if is_kwd(head):
                 name = name.lower()
                 try:
-                    if name == 'letrec':
-                        rest = [to_exp(e) for e in tail[0][0]] + [to_exp(e) for e in tail[1:]]
-                    else:
-                        rest = [to_exp(e) for e in tail]
                     narg, init = next((narg, f) for n, narg, f in kwd_specs if n == name)
                     if len(expr[1:]) != narg:
                         wrong_nargs(narg, expr)
@@ -82,7 +101,6 @@ def to_exp(expr):
                 except StopIteration:
                     return unimplemented(expr)
             else:
-                rest = [to_exp(e) for e in tail]
                 return AppExp(VarExp(name), *rest) if all(rest) else None
     else:
         try:
@@ -112,6 +130,19 @@ if __name__ == '__main__':
           (* x (fact (- x 1)))))))
       (fact 5))
     ''')
-    print(parse(fac5))
-    print(pretty(parse(fac5)))
-    print(ast(fac5))
+    evenodd = dedent('''\
+    (letrec ((even?
+              (lambda (n)
+                (if (zero? n)
+                    #t
+                    (odd? (- n 1)))))
+             (odd?
+              (lambda (n)
+                (if (zero? n)
+                    #f
+                    (even? (- n 1))))))
+      (even? 88))
+    ''')
+    print(parse(evenodd))
+    print(pretty(parse(evenodd)))
+    print(ast(evenodd))
