@@ -43,6 +43,11 @@ class SExp(list):
     def __init__(self, pos, *args):
         self.pos = pos
         super(SExp, self).__init__(args)
+    def __getitem__(self, key):
+        if isinstance(key, slice):
+            return SExp(self.pos, *super(SExp, self).__getitem__(key))
+        else:
+            return super(SExp, self).__getitem__(key)
     def __repr__(self):
         return 'SExp(' + ', '.join(repr(e) for e in self) + ')'
 

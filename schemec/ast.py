@@ -10,13 +10,7 @@ from grammar import (
 from sexp import SExp, parse
 from types import (
     VarExp,
-    NumExp,
-    BoolExp,
-    StrExp,
-    LamExp,
     AppExp,
-    IfExp,
-    LetRecExp
     )
 
 
@@ -87,10 +81,10 @@ def invalid_varname(expr):
 
 def to_exp(expr):
     if isinstance(expr, SExp):
-        if isinstance(expr[0], SExp):
+        head = expr[0]
+        if isinstance(head, SExp):
             return [to_exp(e) for e in expr]
         else:
-            head = expr[0]
             tail = expr[1:]
             rest = [to_exp(e) for e in tail]
             name = head.val
