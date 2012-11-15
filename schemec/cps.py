@@ -1,5 +1,11 @@
 from types import *
 
+__all__ = ['T_c', 'halt']
+
+
+halt = VarExp('halt')
+
+
 ################################################################################
 ## Conversion to CPS
 ################################################################################
@@ -35,7 +41,7 @@ def T_k(exp, k):
     elif isinstance(exp, LetRecExp):
         bs = exp.bindings
         be = exp.bodyExp
-        return LetRecExp([(ve, M(fe)) for ve, fe in bs], T_k(be, k))
+        return LetRecExp([[ve, M(fe)] for ve, fe in bs], T_k(be, k))
     elif isinstance(exp, BeginExp):
         es = exp.exps
         if len(es) == 1:
@@ -76,7 +82,7 @@ def T_c(exp, c):
     elif isinstance(exp, LetRecExp):
         bs = exp.bindings
         be = exp.bodyExp
-        return LetRecExp([(ve, M(fe)) for ve, fe in bs], T_c(be, c))
+        return LetRecExp([[ve, M(fe)] for ve, fe in bs], T_c(be, c))
     elif isinstance(exp, BeginExp):
         es = exp.exps
         if len(es) == 1:
@@ -139,7 +145,7 @@ if __name__ == '__main__':
     print(exp)
     print(T_c(exp, VarExp('halt')))
 
-    exp = LetRecExp([(VarExp('fact'),
+    exp = LetRecExp([[VarExp('fact'),
                       LamExp([VarExp('x')],
                              IfExp(AppExp(VarExp('='),
                                           VarExp('x'),
@@ -150,7 +156,7 @@ if __name__ == '__main__':
                                           AppExp(VarExp('fact'),
                                                  AppExp(VarExp('-'),
                                                         VarExp('x'),
-                                                        NumExp(1)))))))],
+                                                        NumExp(1))))))]],
                     AppExp(VarExp('fact'), NumExp(5)))
     print(exp)
     print(T_c(exp, VarExp('halt')))
