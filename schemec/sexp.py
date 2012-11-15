@@ -72,30 +72,58 @@ def simplify(expr):
     else:
         raise ValueError('invalid SExp: ' + str(expr))
 
-def has_subexpr(expr):
-    if not isinstance(expr, SExp):
-        return False
-    else:
-        return any(isinstance(e, SExp) for e in expr)
 
-def pretty(expr, indent=0):
-    prefix = ' ' * indent
-    res = prefix
-    if isinstance(expr, SExp):
-        res += LPAR
-        if has_subexpr(expr):
-            res += ' '.join(pretty(e) for e in expr[:2])
-            if len(expr) > 2:
-                res += NEWLINE
-                res += pretty(expr[2:], indent + 1)
+def pretty(expr):
+    subexpr = SExp
+    # helper function for determining if some of an expr are expr
+    def any_subexpr(expr):
+        if not isinstance(expr, subexpr):
+            return False
         else:
-            res += ' '.join(pretty(e) for e in expr)
-        res += RPAR
-    elif isinstance(expr, Token):
-        res += expr.val
-    elif isinstance(expr, (list, tuple)):
-        res += (NEWLINE + prefix).join(pretty(e, indent) for e in expr)
-    return res
+            return any(isinstance(e, subexpr) for e in expr)
+    # helper function for determining if all of an expr are expr
+    def all_subexpr(expr):
+        if not isinstance(expr, subexpr):
+            return False
+        else:
+            return all(isinstance(e, subexpr) for e in expr)
+    # helper function for determining if we should split
+    def partial_(expr):
+        return (
+            isinstance(expr, subexpr) and
+            not all_subexpr(expr) and
+            any_subexpr(expr) and
+            len(expr) > 2
+            )
+    def pretty_(expr, indent, partial=False):
+        prefix = NEWLINE + (' ' * 2 * indent)
+        res = ''
+        if isinstance(expr, subexpr):
+            all_ = all_subexpr(expr)
+            any_ = any_subexpr(expr)
+            if not partial:
+                res += LPAR
+            if all_:
+                prefix += ' ' * 2
+                if not partial:
+                    indent += 1
+                    res = prefix + LPAR
+                res += prefix.join(pretty_(e, indent) for e in expr)
+            elif any_:
+                res += ' '.join(pretty_(e, indent) for e in expr[:2])
+                if len(expr) > 2:
+                    res += NEWLINE + (' ' * 2 * (indent + 1))
+                    res += pretty_(expr[2:], indent + 1, True)
+            else:
+                res += ' '.join(pretty_(e, indent) for e in expr)
+            if not partial:
+                res += RPAR
+        elif isinstance(expr, Token):
+            res += expr.val
+        else:
+            raise ValueError('invalid SExp: ' + str(expr))
+        return res
+    return pretty_(expr, 0)
 
 if __name__ == '__main__':
     fac = dedent('''\
@@ -111,11 +139,11 @@ if __name__ == '__main__':
     ;; factorial : number -> number
     ;; to calculate the product of all positive
     ;; integers less than or equal to n.
-    (letrec fact
+    (letrec ((fact
       (lambda (x)
         (if (= x 0)
           1
-          (* x (fact (- x 1)))))
+          (* x (fact (- x 1)))))))
       (fact 5))
     ''')
     print(parse(fac5))
