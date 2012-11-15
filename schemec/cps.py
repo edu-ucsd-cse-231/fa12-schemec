@@ -1,4 +1,3 @@
-
 from types import *
 
 __all__ = ['T_c', 'halt']
@@ -40,9 +39,9 @@ def T_k(exp, k):
         ee = exp.elseExp
         return T_k(ce, lambda _ce: IfExp(_ce, T_k(te, k), T_k(ee, k)))
     elif isinstance(exp, LetRecExp):
-        vfes = exp.varFuncExps
+        bs = exp.bindings
         be = exp.bodyExp
-        return LetRecExp([[ve, M(fe)] for ve, fe in vfes], T_k(be, k))
+        return LetRecExp([[ve, M(fe)] for ve, fe in bs], T_k(be, k))
     elif isinstance(exp, BeginExp):
         es = exp.exps
         if len(es) == 1:
@@ -81,9 +80,9 @@ def T_c(exp, c):
                                        IfExp(_ce, T_c(te, _k), T_c(ee, _k)))),
                              c)
     elif isinstance(exp, LetRecExp):
-        vfes = exp.varFuncExps
+        bs = exp.bindings
         be = exp.bodyExp
-        return LetRecExp([[ve, M(fe)] for ve, fe in vfes], T_c(be, c))
+        return LetRecExp([[ve, M(fe)] for ve, fe in bs], T_c(be, c))
     elif isinstance(exp, BeginExp):
         es = exp.exps
         if len(es) == 1:
@@ -138,21 +137,26 @@ if __name__ == '__main__':
     print(exp)
     print(T_c(exp, VarExp('halt')))
 
-    exp = IfExp(IfExp(BoolExp(True), BoolExp(False), BoolExp(True)), NumExp(1), NumExp(0))
+    exp = IfExp(IfExp(BoolExp(True),
+                      BoolExp(False),
+                      BoolExp(True)),
+                NumExp(1),
+                NumExp(0))
     print(exp)
     print(T_c(exp, VarExp('halt')))
 
-    exp = LetRecExp([[VarExp('fact'), LamExp([VarExp('x')],
-                                           IfExp(AppExp(VarExp('='),
+    exp = LetRecExp([[VarExp('fact'),
+                      LamExp([VarExp('x')],
+                             IfExp(AppExp(VarExp('='),
+                                          VarExp('x'),
+                                          NumExp(0)),
+                                   NumExp(1),
+                                   AppExp(VarExp('*'),
+                                          VarExp('x'),
+                                          AppExp(VarExp('fact'),
+                                                 AppExp(VarExp('-'),
                                                         VarExp('x'),
-                                                        NumExp(0)),
-                                                 NumExp(1),
-                                                 AppExp(VarExp('*'),
-                                                        VarExp('x'),
-                                                        AppExp(VarExp('fact'),
-                                                               AppExp(VarExp('-'),
-                                                                      VarExp('x'),
-                                                                      NumExp(1))))))]],
+                                                        NumExp(1))))))]],
                     AppExp(VarExp('fact'), NumExp(5)))
     print(exp)
     print(T_c(exp, VarExp('halt')))
@@ -161,4 +165,23 @@ if __name__ == '__main__':
                    VarExp('x'))
     print(exp)
     print(T_k(exp, lambda x: AppExp(VarExp('halt'), x)))
-    # print(T_c(exp, VarExp('halt')))
+
+    exp = LetRecExp([[VarExp('even?'),
+                      LamExp([VarExp('n')],
+                             IfExp(AppExp(VarExp('zero?'), VarExp('n')),
+                                   true,
+                                   AppExp(VarExp('odd?'),
+                                          AppExp(VarExp('-'),
+                                                 VarExp('n'),
+                                                 NumExp(1)))))],
+                     [VarExp('odd?'),
+                      LamExp([VarExp('n')],
+                             IfExp(AppExp(VarExp('zero?'), VarExp('n')),
+                                   false,
+                                   AppExp(VarExp('even?'),
+                                          AppExp(VarExp('-'),
+                                                 VarExp('n'),
+                                                 NumExp(1)))))]],
+                    AppExp(VarExp('even?'), NumExp(40)))
+    print(exp)
+    print(T_c(exp, VarExp('halt')))

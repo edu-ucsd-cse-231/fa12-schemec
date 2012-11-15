@@ -200,20 +200,18 @@ class IfExp:
 class LetRecExp:
     """A letrec expression.
 
-    @type varExp: A VarExp
-    @param varExp: The symbol to which the function will be bound
-    @type funcExp: A LamExp
-    @param funcExp: The recursive function
+    @type bindings: A list of [VarExp, LamExp] bindings
+    @param bindings: The bindings to add
     @type bodyExp: Any Scheme expression
     @param bodyExp: The body of the LetRec expression
     """
-    def __init__(self, varFuncExps, bodyExp):
-        if isinstance(varFuncExps, AppExp):
-            varFuncExps = varFuncExps.tolist()
-        for i, expr in enumerate(varFuncExps):
+    def __init__(self, bindings, bodyExp):
+        if isinstance(bindings, AppExp):
+            bindings = bindings.tolist()
+        for i, expr in enumerate(bindings):
             if isinstance(expr, AppExp):
-                varFuncExps[i] = expr.tolist()
-        self.varFuncExps = varFuncExps
+                bindings[i] = expr.tolist()
+        self.bindings = bindings
         self.bodyExp = bodyExp
 
     def __repr__(self):
@@ -226,7 +224,7 @@ class LetRecExp:
                 SExp(unkpos,
                     v.toSExp(),
                     f.toSExp()
-                    ) for v, f in self.varFuncExps
+                    ) for v, f in self.bindings
                 ]),
             self.bodyExp.toSExp()
             )
