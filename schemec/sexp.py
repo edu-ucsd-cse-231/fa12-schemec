@@ -93,7 +93,7 @@ def pretty(expr, indent=0):
         res += RPAR
     elif isinstance(expr, Token):
         res += expr.val
-    elif isinstance(expr, list):
+    elif isinstance(expr, (list, tuple)):
         res += (NEWLINE + prefix).join(pretty(e, indent) for e in expr)
     return res
 

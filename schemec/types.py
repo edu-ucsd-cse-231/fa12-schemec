@@ -5,14 +5,22 @@ __all__ = [
     'Pos',
     'Token',
     'SExp',
+    'AtomicExp',
     'VarExp',
     'NumExp',
     'BoolExp',
+    'true',
+    'false',
+    'VoidExp',
+    'void',
     'StrExp',
     'LamExp',
     'AppExp',
     'IfExp',
-    'LetRecExp'
+    'LetRecExp',
+    'BeginExp',
+    'SetExp',
+    'SetThenExp'
     ]
 
 ################################################################################
@@ -34,22 +42,23 @@ class SExp(list):
     """
     def __init__(self, pos, *args):
         self.pos = pos
-        super(SExp, self).__init__(*args)
+        super(SExp, self).__init__(args)
     def __repr__(self):
         return 'SExp(' + ', '.join(repr(e) for e in self) + ')'
 
+# import here to avoid circular import dependency
+from sexp import pretty
+unkpos = Pos(-1, -1)
 
 ################################################################################
 ## Scheme Expressions
 ################################################################################
 
-# VarExp = namedtuple('VarExp', 'name')
-# LamExp = namedtuple('LamExp', 'vars, bodyExp')
-# AppExp = namedtuple('AppExp', 'funcExp, argExps')
-# IfExp  = namedtuple('IfExp',  'condExp, thenExp, elseExp')
-
 ## Atomic Expressions
-class AtomicExp: pass
+class AtomicExp:
+    def toSExp(self):
+        tok = Token(unkpos, repr(self))
+        return tok
 
 class VarExp(AtomicExp):
     """A variable.
@@ -87,6 +96,20 @@ class BoolExp(AtomicExp):
     def __repr__(self):
         return "#t" if self.val else "#f"
 
+# these may be useful synonyms
+true = BoolExp(True)
+false = BoolExp(False)
+
+class VoidExp(AtomicExp):
+    """void/nil/etc..."""
+    def __repr__(self):
+        return pretty(self.toSExp())
+    def toSExp(self):
+        sexp = SExp(unkpos, Token(unkpos, 'void'))
+        return sexp
+
+void = VoidExp()
+
 class StrExp(AtomicExp):
     """A string.
 
@@ -114,8 +137,15 @@ class LamExp(AtomicExp):
         self.bodyExp = bodyExp
 
     def __repr__(self):
-        return '(lambda ({0}) {1})'.format(' '.join(map(str, self.vars)),
-                                           self.bodyExp)
+        return pretty(self.toSExp())
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            Token(unkpos, 'lambda'),
+            SExp(unkpos, *[e.toSExp() for e in self.vars]),
+            self.bodyExp.toSExp()
+            )
+        return sexp
 
 ## More complex expressions
 class AppExp:
@@ -131,13 +161,19 @@ class AppExp:
         self.argExps = argExps
 
     def __repr__(self):
-        return '({0} {1})'.format(self.funcExp,
-                                  ' '.join(map(repr, self.argExps)))
+        return pretty(self.toSExp())
 
     def tolist(self):
         lst = [self.funcExp]
         lst.extend(self.argExps)
         return lst
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            self.funcExp.toSExp(),
+            *[e.toSExp() for e in self.argExps]
+            )
+        return sexp
 
 class IfExp:
     """An if expression.
@@ -150,8 +186,16 @@ class IfExp:
         self.elseExp = elseExp
 
     def __repr__(self):
-        return '(if {0} {1} {2})'.format(self.condExp, self.thenExp,
-                                         self.elseExp)
+        return pretty(self.toSExp())
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            Token(unkpos, 'if'),
+            self.condExp.toSExp(),
+            self.thenExp.toSExp(),
+            self.elseExp.toSExp()
+            )
+        return sexp
 
 class LetRecExp:
     """A letrec expression.
@@ -173,5 +217,86 @@ class LetRecExp:
         self.bodyExp = bodyExp
 
     def __repr__(self):
-        return '(letrec ({0}) {1})'.format(' '.join('({0} {1})'.format(v, f) for v, f in self.varFuncExps),
-                                                 self.bodyExp)
+        return pretty(self.toSExp())
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            Token(unkpos, 'letrec'),
+            SExp(unkpos, *[
+                SExp(unkpos,
+                    v.toSExp(),
+                    f.toSExp()
+                    ) for v, f in self.varFuncExps
+                ]),
+            self.bodyExp.toSExp()
+            )
+        return sexp
+
+class BeginExp:
+    """A begin expression.
+
+    @type exps: A list of Scheme expressions
+    @param exps: The expressions contained within the `begin`
+    """
+    def __init__(self, *exps):
+        self.exps = exps
+
+    def __repr__(self):
+        return pretty(self.toSExp())
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            Token(unkpos, 'begin'),
+            SExp(unkpos, *[e.toSExp() for e in self.exps])
+            )
+        return sexp
+
+class SetExp:
+    """A set! expression.
+
+    @type varExp: A VarExp
+    @param varExp: The symbol to be rebound
+    @type exp: Any Scheme expression
+    @param exp: The new value to be bound to varExp
+    """
+    def __init__(self, varExp, exp):
+        self.varExp = varExp
+        self.exp = exp
+
+    def __repr__(self):
+        return pretty(self.toSExp())
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            Token(unkpos, 'set!'),
+            self.varExp.toSExp(),
+            self.exp.toSExp()
+            )
+        return sexp
+
+class SetThenExp:
+    """A set-then! expression.
+
+    @type varExp: A VarExp
+    @param varExp: The symbol to be rebound
+    @type exp: Any Scheme expression
+    @param exp: The new value to be bound to varExp
+    @type thenExp: Any Scheme expression
+    @param thenExp: The continuation to apply
+    """
+    def __init__(self, varExp, exp, thenExp):
+        self.varExp = varExp
+        self.exp = exp
+        self.thenExp = thenExp
+
+    def __repr__(self):
+        pretty(self.toSExp())
+
+    def toSExp(self):
+        sexp = SExp(unkpos,
+            Token(unkpos, 'set-then!'),
+            self.varExp.toSExp(),
+            self.exp.toSExp(),
+            self.thenExp.toSExp()
+            )
+        return sexp

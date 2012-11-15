@@ -1,6 +1,12 @@
 
 from types import *
 
+__all__ = ['T_c', 'halt']
+
+
+halt = VarExp('halt')
+
+
 ################################################################################
 ## Conversion to CPS
 ################################################################################
@@ -33,6 +39,20 @@ def T_k(exp, k):
         te = exp.thenExp
         ee = exp.elseExp
         return T_k(ce, lambda _ce: IfExp(_ce, T_k(te, k), T_k(ee, k)))
+    elif isinstance(exp, LetRecExp):
+        vfes = exp.varFuncExps
+        be = exp.bodyExp
+        return LetRecExp([[ve, M(fe)] for ve, fe in vfes], T_k(be, k))
+    elif isinstance(exp, BeginExp):
+        es = exp.exps
+        if len(es) == 1:
+            return T_k(es[0], k)
+        else:
+            return T_k(es[0], lambda _: T_k(BeginExp(*es[1:]), k))
+    elif isinstance(exp, SetExp):
+        ve = exp.varExp
+        ee = exp.exp
+        return T_k(ee, lambda _ee: SetThenExp(ve, _ee, k(void)))
     else:
         raise TypeError(exp)
 
@@ -63,7 +83,17 @@ def T_c(exp, c):
     elif isinstance(exp, LetRecExp):
         vfes = exp.varFuncExps
         be = exp.bodyExp
-        return LetRecExp([ve, M(fe) for ve, fe in vfes], T_c(be, c))
+        return LetRecExp([[ve, M(fe)] for ve, fe in vfes], T_c(be, c))
+    elif isinstance(exp, BeginExp):
+        es = exp.exps
+        if len(es) == 1:
+            return T_c(es[0], c)
+        else:
+            return T_k(es[0], lambda _: T_c(BeginExp(*es[1:]), c))
+    elif isinstance(exp, SetExp):
+        ve = exp.varExp
+        ee = exp.exp
+        return T_k(ee, lambda _ee: SetThenExp(ve, _ee, AppExp(c, void)))
     else:
         raise TypeError(exp)
 
@@ -71,7 +101,7 @@ def Tx_k(exps, k):
     """Transform a list of expressions into CPS.
 
     @type exps: A List of SchemeExps
-    @type k: LamExp
+    @type k: A *Python* function from SchemeExp -> SchemeExp
     """
     if len(exps) == 0:
         return k([])
@@ -126,3 +156,9 @@ if __name__ == '__main__':
                     AppExp(VarExp('fact'), NumExp(5)))
     print(exp)
     print(T_c(exp, VarExp('halt')))
+
+    exp = BeginExp(SetExp(VarExp('x'), NumExp(1)),
+                   VarExp('x'))
+    print(exp)
+    print(T_k(exp, lambda x: AppExp(VarExp('halt'), x)))
+    # print(T_c(exp, VarExp('halt')))
