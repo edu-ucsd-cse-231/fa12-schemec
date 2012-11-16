@@ -119,8 +119,16 @@ kwd_specs = [
     ('letrec', 2, LetRecExp)
     ]
 
+def to_bool(val):
+    if val == '#t':
+        return BoolExp(True)
+    elif val == '#f':
+        return BoolExp(False)
+    else:
+        raise ValueError('invalid Boolean: ' + str(val))
+
 val_specs = [
-    (is_bool, BoolExp),
+    (is_bool, to_bool),
     (is_integer, NumExp),
     (is_decimal, NumExp),
     (is_string, StrExp)
