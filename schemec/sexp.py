@@ -3,7 +3,7 @@ import re
 
 from textwrap import dedent
 
-from types import (
+from schemec.types import (
     Pos,
     SExp,
     Token

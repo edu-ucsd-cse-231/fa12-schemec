@@ -1,4 +1,3 @@
-
 from collections import namedtuple
 
 __all__ = [
@@ -52,7 +51,7 @@ class SExp(list):
         return 'SExp(' + ', '.join(repr(e) for e in self) + ')'
 
 # import here to avoid circular import dependency
-from sexp import pretty
+from schemec.sexp import pretty
 unkpos = Pos(-1, -1)
 
 ################################################################################

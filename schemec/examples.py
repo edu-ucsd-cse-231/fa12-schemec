@@ -1,9 +1,8 @@
-
 from textwrap import dedent
 
-from ast import ast
-from sexp import parse, pretty
-from cps import T_c, halt
+from schemec.ast import ast
+from schemec.sexp import parse, pretty
+from schemec.cps import T_c, halt
 
 if __name__ == '__main__':
     fac5 = dedent('''\
