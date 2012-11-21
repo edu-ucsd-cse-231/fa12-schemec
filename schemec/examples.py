@@ -4,7 +4,7 @@ from schemec.ast import ast
 from schemec.sexp import parse, pretty
 from schemec.cps import T_c, halt
 
-if __name__ == '__main__':
+def main():
     fac5 = dedent('''\
     ;; factorial : number -> number
     ;; to calculate the product of all positive
@@ -36,3 +36,8 @@ if __name__ == '__main__':
     print(ast(evenodd))
     print('; cps ast')
     print(T_c(ast(evenodd), halt))
+    return 0
+
+if __name__ == '__main__':
+    import sys
+    sys.exit(main())
