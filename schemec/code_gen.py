@@ -1,3 +1,5 @@
+from textwrap import dedent
+
 from schemec.cps import GenSym, T_c
 from schemec.types import *
 
@@ -11,15 +13,24 @@ class CodeGenerator():
         self.ivars = set()
         self.svars = set()
         self.gensym = GenSym()
-        self.iprimitives = { '+':'+',
-                            '-':'-',
-                            '*':'*',
-                            '=':'=='}
+        self.iprimitives = {
+            '+': '+',
+            '-': '-',
+            '*': '*',
+            '=': '=='
+            }
         self.iprimFormat = '{0}.intVal = {1}.intVal {op} {2}.intVal;\n'
 
-        self.sprimitives = { 'string-append' : 'strcat({0}.strVal, {1}.strVal);\nstrcat({0}.strVal, {2}.strVal);\n',
-                            'string=?' : '{0}.intVal = 1 - abs(strcmp({1}.strVal,{2}.strVal));\n'}
-        self.sprimrts = {'string-append' : self.setStrVar, 'string=?' : self.setIntVar}
+        self.sprimitives = {
+            'string-append': dedent('''\
+                    strcat({0}.strVal, {1}.strVal);
+                    strcat({0}.strVal, {2}.strVal);'''),
+            'string=?': '{0}.intVal = 1 - abs(strcmp({1}.strVal,{2}.strVal));\n'
+            }
+        self.sprimrts = {
+            'string-append': self.setStrVar,
+            'string=?': self.setIntVar
+            }
 
     """
     Translates the given CPS expression into C
@@ -27,17 +38,17 @@ class CodeGenerator():
     @param exp: the expression to translate
     """
     def code_gen(self, exp):
-        code = ('#include<stdio.h>\n'
-                '#include<string.h>\n'
-                '#define True 1\n'
-                '#define False 0\n'
-                '\n'
-                'typedef struct {\n'
-                'int intVal;\n'
-                'char strVal[256];\n'
-                '} schemetype ;\n\n'
-                'main()\n'
-                '{\n')
+        code = dedent('''\
+            #include<stdio.h>
+            #include<string.h>
+            #define True 1
+            #define False 0
+            typedef struct {
+              int intVal;
+              char strVal[256];
+            } schemetype;
+            main()
+            {''')
         code += self.toC(exp, self.rv)
         return code + "\n}\n"
 
