@@ -1,5 +1,5 @@
-from cps import GenSym, T_c
-from types import *
+from schemec.cps import GenSym, T_c
+from schemec.types import *
 
 class CodeGenerator():
     """ The code generator

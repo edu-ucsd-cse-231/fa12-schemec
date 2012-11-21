@@ -1,14 +1,13 @@
-
 from sys import stderr
 
-from grammar import (
-    is_kwd,
-    is_identifier,
-    kwd_specs,
-    val_specs
-    )
-from sexp import SExp, parse
-from types import (
+from schemec.grammar import (
+    ischemec.s_kwd,
+    ischemec.s_identifier,
+    kschemec.wd_specs,
+    vschemec.al_specs
+    )schemec.
+from schemec.schemec.sexp import SExp, parse
+from schemec.types import (
     VarExp,
     AppExp,
     )
