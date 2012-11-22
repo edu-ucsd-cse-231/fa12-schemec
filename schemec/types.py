@@ -19,8 +19,18 @@ __all__ = [
     'LetRecExp',
     'BeginExp',
     'SetExp',
-    'SetThenExp'
+    'SetThenExp',
+    'gensym'
     ]
+
+class GenSym:
+    n = 1
+    @classmethod
+    def __call__(cls, sym):
+        sym += str(cls.n)
+        cls.n += 1
+        return VarExp(sym)
+gensym = GenSym()
 
 ################################################################################
 ## Parser types
@@ -139,6 +149,7 @@ class LamExp(AtomicExp):
             vars = vars.tolist()
         self.vars = vars
         self.bodyExp = bodyExp
+        self.sym = gensym('l_')
 
     def __repr__(self):
         return pretty(self.toSExp())

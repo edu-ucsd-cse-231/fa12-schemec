@@ -10,14 +10,6 @@ halt = VarExp('halt')
 ## Conversion to CPS
 ################################################################################
 
-class GenSym:
-    n = 1
-    def __call__(self, sym):
-        sym += str(self.n)
-        self.n += 1
-        return VarExp(sym)
-gensym = GenSym()
-
 def T_k(exp, k):
     """Transform an expression into CPS with a continuation lifted into the host
     language.
