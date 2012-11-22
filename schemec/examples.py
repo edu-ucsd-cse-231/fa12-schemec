@@ -3,6 +3,7 @@ from textwrap import dedent
 from schemec.ast import ast
 from schemec.sexp import parse, pretty
 from schemec.cps import T_c, halt
+from schemec.code_gen import CodeGenerator
 
 def main():
     fac5 = dedent('''\
@@ -28,14 +29,20 @@ def main():
                     #f
                     (even? (- n 1))))))
       (even? 88))''')
+    e = fac5
     print('; original')
-    print(evenodd)
+    print(e)
     print('; parsed')
-    print(pretty(parse(evenodd)))
+    e_parsed = parse(e)
+    print(pretty(e_parsed))
     print('; ast')
-    print(ast(evenodd))
+    e_ast = ast(e)
+    print(e_ast)
     print('; cps ast')
-    print(T_c(ast(evenodd), halt))
+    e_cps = T_c(e_ast, halt)
+    print(e_cps)
+    gen = CodeGenerator()
+    print(gen.code_gen(T_c(e_ast, gen.retExp)))
     return 0
 
 if __name__ == '__main__':
