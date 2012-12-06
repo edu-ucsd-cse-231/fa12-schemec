@@ -1,4 +1,6 @@
+
 from collections import namedtuple
+from itertools import chain
 
 __all__ = [
     'Pos',
@@ -26,7 +28,7 @@ __all__ = [
 class GenSym:
     n = 1
     @classmethod
-    def __call__(cls, sym):
+    def __call__(cls, sym=''):
         sym += str(cls.n)
         cls.n += 1
         return VarExp(sym)
@@ -70,6 +72,9 @@ unkpos = Pos(-1, -1)
 
 ## Atomic Expressions
 class AtomicExp:
+    @staticmethod
+    def __iter__():
+        return []
     def toSExp(self):
         tok = Token(unkpos, repr(self))
         return tok
@@ -137,6 +142,7 @@ class StrExp(AtomicExp):
         return '"{0}"'.format(self.val)
 
 class LamExp(AtomicExp):
+    n = 1
     """A lambda expression.
 
     @type vars: A List of VarExps
@@ -149,7 +155,13 @@ class LamExp(AtomicExp):
             vars = vars.tolist()
         self.vars = vars
         self.bodyExp = bodyExp
-        self.sym = gensym('l_')
+        self.sym = 'lambda%d' % LamExp.n
+        LamExp.n += 1
+
+    def __iter__(self):
+        lst = [v for v in self.vars]
+        lst.append(self.bodyExp)
+        return lst
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -175,6 +187,9 @@ class AppExp:
         self.funcExp = funcExp
         self.argExps = argExps
 
+    def __iter__(self):
+        return self.tolist()
+
     def __repr__(self):
         return pretty(self.toSExp())
 
@@ -199,6 +214,9 @@ class IfExp:
         self.condExp = condExp
         self.thenExp = thenExp
         self.elseExp = elseExp
+
+    def __iter__(self):
+        return [self.condExp, self.thenExp, self.elseExp]
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -229,6 +247,11 @@ class LetRecExp:
         self.bindings = bindings
         self.bodyExp = bodyExp
 
+    def __iter__(self):
+        lst = list(chain(self.bindings))
+        lst.append(self.bodyExp)
+        return lst
+
     def __repr__(self):
         return pretty(self.toSExp())
 
@@ -254,6 +277,9 @@ class BeginExp:
     def __init__(self, *exps):
         self.exps = exps
 
+    def __iter__(self):
+        return [e for e in self.exps]
+
     def __repr__(self):
         return pretty(self.toSExp())
 
@@ -275,6 +301,9 @@ class SetExp:
     def __init__(self, varExp, exp):
         self.varExp = varExp
         self.exp = exp
+
+    def __iter__(self):
+        return [self.varExp, self.exp]
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -301,6 +330,9 @@ class SetThenExp:
         self.varExp = varExp
         self.exp = exp
         self.thenExp = thenExp
+
+    def __iter__(self):
+        return [self.varExp, self.exp, self.thenExp]
 
     def __repr__(self):
         pretty(self.toSExp())

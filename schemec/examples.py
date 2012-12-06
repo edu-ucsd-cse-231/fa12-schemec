@@ -41,8 +41,12 @@ def main():
     print('; cps ast')
     e_cps = T_c(e_ast, halt)
     print(e_cps)
+    print('; C code')
     gen = CodeGenerator()
-    print(gen.code_gen(T_c(e_ast, gen.retExp)))
+    e_cps = T_c(e_ast, gen.retExp)
+    print('; cps ast for codegen')
+    print(e_cps)
+    print(gen.code_gen(e_cps))
     return 0
 
 if __name__ == '__main__':

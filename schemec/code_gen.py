@@ -1,3 +1,5 @@
+
+from sys import stderr
 from textwrap import dedent
 
 from schemec.cps import T_c
@@ -14,18 +16,23 @@ class CodeGenerator():
         self.ivars = set()
         self.svars = set()
         self.fvars = set()
-        self.iprimitives = {
+        self.ibprimitives = {
             '+': '+',
             '-': '-',
             '*': '*',
             '=': '=='
             }
-        self.iprimFormat = '{0}.intVal = {1}.intVal {op} {2}.intVal;\n'
+        self.ibprimFormat = '{0}.intVal = {1}.intVal {op} {2}.intVal;\n'
+        self.iuprimitives = {
+            'zero?': '== 0'
+            }
+        self.iuprimFormat = '{0}.intVal = {1}.intVal {op};\n'
         self.tmpvar = gensym('_')
         self.sprimitives = {
             'string-append': dedent('''\
-                    strcat({0}.strVal, {1}.strVal);
-                    strcat({0}.strVal, {2}.strVal);'''),
+                strcat({0}.strVal, {1}.strVal);
+                strcat({0}.strVal, {2}.strVal);
+                '''),
             'string=?': '{0}.intVal = 1 - abs(strcmp({1}.strVal,{2}.strVal));\n'
             }
         self.sprimrts = {
@@ -40,21 +47,54 @@ class CodeGenerator():
     @param exp: the expression to translate
     """
     def code_gen(self, exp):
+        nvars = 10
         code = dedent('''\
             #include<stdio.h>
             #include<string.h>
             #define True 1
             #define False 0
             typedef struct {
-              void * contVal;
               int intVal;
               char strVal[256];
+              void * contVal;
             } schemetype;
             main()
             {
-            ''')
+              void * cont = &&entry; // special jump to program entry
+              schemetype args[{0}];
+              goto *cont;
+              '''.format(nvars))
         code += self.toC(exp, self.rv)
-        return code + "\n}\n"
+        return code + '\n}\n'
+
+    """
+    Collects all functions in the AST and produces info about them
+    @type exp: a CPS expression
+    @param exp: the expression to collect function info from
+    """
+    def collect_lambdas(self, exp):
+        acc = []
+        if isinstance(exp, IfExp):
+            acc.extend(self.collect_lambdas(exp.condExp))
+            acc.extend(self.collect_lambdas(exp.thenExp))
+            acc.extend(self.collect_lambdas(exp.elseExp))
+        elif isinstance(exp, AppExp):
+            acc.extend(self.collect_lambdas(exp.funcExp))
+            for exp_ in exp.argExps:
+                acc.extend(self.collect_lambdas(exp_))
+        elif isinstance(exp, LamExp):
+            acc.append(exp)
+            acc.extend(self.collect_lambdas(exp.bodyExp))
+        elif isinstance(exp, AtomicExp):
+            pass
+        elif isinstance(exp, LetRecExp):
+            for exp1, exp2 in exp.bindings:
+                acc.extend(self.collect_lambdas(exp1))
+                acc.extend(self.collect_lambdas(exp2))
+            acc.extend(self.collect_lambdas(exp.bodyExp))
+        else:
+            raise RuntimeError('unimplemented expression type: {0}'.format(str(type(exp))))
+        return acc
 
     """
     Translates the given CPS expression into C such that the result of the
@@ -66,15 +106,15 @@ class CodeGenerator():
     @param exp: the variable to assign the result to
     """
     def toC(self, exp, assignTo):
-        if (isinstance(exp, IfExp)):
+        if isinstance(exp, IfExp):
             return self.ifToC(exp, assignTo)
-        if (isinstance(exp, AppExp)):
+        elif isinstance(exp, AppExp):
             return self.appToC(exp, assignTo)
-        if (isinstance(exp, LamExp)):
+        elif isinstance(exp, LamExp):
             return self.lamToC(exp, assignTo)
-        if (isinstance(exp, AtomicExp)):
+        elif isinstance(exp, AtomicExp):
             return self.atmToC(exp, assignTo)
-        if (isinstance(exp, LetRecExp)):
+        elif isinstance(exp, LetRecExp):
             return self.letrecToC(exp, assignTo)
         else:
             raise RuntimeError('unimplemented expression type: {0}'.format(str(type(exp))))
@@ -133,7 +173,7 @@ class CodeGenerator():
         if var is self.rv:
             self.rvtype = 1
         end = '.strVal' if isinstance(val, VarExp) else ''
-        return ('strcpy({0}.strVal,{1}' + end + ');\n').format(var, val)
+        return 'strcpy({0}.strVal,{1}{2});\n'.format(var, val, end)
 
     """
     Translates the body of a given lambda expression into C such
@@ -153,7 +193,10 @@ class CodeGenerator():
             else:
                 formStr = '%s'
                 typeStr = 'strVal'
-            return ('printf(\"' + formStr + '\\n\", {0}.' + typeStr + ');\nreturn 0;\n').format(self.rv)
+            return dedent(r'''\
+                printf("{0}\n", {1}.{2});
+                return 0;
+                '''.format(formStr, self.rv, typeStr))
         return self.toC(exp.bodyExp, assignTo)
 
     """
@@ -206,10 +249,13 @@ class CodeGenerator():
         return code
 
     def isPrimitive(self, funcExp):
-        return self.isIPrimitive(funcExp) or self.isSPrimitive(funcExp)
+        return self.isIBPrimitive(funcExp) or self.isIUPrimitive(funcExp) or self.isSPrimitive(funcExp)
 
-    def isIPrimitive(self, funcExp):
-        return isinstance(funcExp, VarExp) and funcExp.name in self.iprimitives.keys()
+    def isIBPrimitive(self, funcExp):
+        return isinstance(funcExp, VarExp) and funcExp.name in self.ibprimitives.keys()
+
+    def isIUPrimitive(self, funcExp):
+        return isinstance(funcExp, VarExp) and funcExp.name in self.iuprimitives.keys()
 
     def isSPrimitive(self, funcExp):
         return isinstance(funcExp, VarExp) and funcExp.name in self.sprimitives.keys()
@@ -223,19 +269,25 @@ class CodeGenerator():
     @param exp: the variable to assign the result of the continuation to
     """
     def primToC(self, exp, assignTo):
-        if self.isIPrimitive(exp.funcExp):
+        if self.isIBPrimitive(exp.funcExp):
             setvar = self.setIntVar
-            primFormat = self.iprimFormat.format('{0}','{1}','{2}',op=self.iprimitives[exp.funcExp.name])
+            primFormat = self.ibprimFormat.format('{0}', '{1}', '{2}', op=self.ibprimitives[exp.funcExp.name])
+            nary = 2
+        elif self.isIUPrimitive(exp.funcExp):
+            setvar = self.setIntVar
+            primFormat = self.iuprimFormat.format('{0}', '{1}', op=self.iuprimitives[exp.funcExp.name])
+            nary = 1
         else:
             setvar = self.sprimrts[exp.funcExp.name]
             primFormat = self.sprimitives[exp.funcExp.name]
+            nary = 2
 
-        a, b, c = [gensym('_') for i in range(3)]
-        code = self.argsToC([a,b], exp.argExps[:-1])
-        code += self.declareVar(c)
-        setvar(c)
-        code += primFormat.format(c.name, a.name, b.name)
-        cont = AppExp(exp.argExps[-1],c)
+        syms = [gensym('_') for _ in range(nary + 1)]
+        code = self.argsToC(syms[:nary], exp.argExps[:-1])
+        code += self.declareVar(syms[-1])
+        setvar(syms[-1])
+        code += primFormat.format(syms[-1].name, *[s.name for s in syms[:nary]])
+        cont = AppExp(exp.argExps[-1], syms[-1])
         return code + self.toC(cont, assignTo)
 
     """
