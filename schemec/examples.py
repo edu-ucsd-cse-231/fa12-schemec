@@ -4,6 +4,7 @@ from schemec.ast import ast
 from schemec.sexp import parse, pretty
 from schemec.cps import T_c, halt
 from schemec.code_gen import CodeGenerator
+from schemec.opt import inline
 
 def main():
     fac5 = dedent('''\
@@ -39,11 +40,11 @@ def main():
     e_ast = ast(e)
     print(e_ast)
     print('; cps ast')
-    e_cps = T_c(e_ast, halt)
+    e_cps = T_c(e_ast, halt).map(inline)
     print(e_cps)
     print('; C code')
     gen = CodeGenerator()
-    e_cps = T_c(e_ast, gen.retExp)
+    e_cps = T_c(e_ast, gen.retExp).map(inline)
     print('; cps ast for codegen')
     print(e_cps)
     print(gen.code_gen(e_cps))

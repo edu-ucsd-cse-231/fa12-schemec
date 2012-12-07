@@ -1,6 +1,5 @@
 
 from collections import namedtuple
-from itertools import chain
 
 __all__ = [
     'Pos',
@@ -72,9 +71,8 @@ unkpos = Pos(-1, -1)
 
 ## Atomic Expressions
 class AtomicExp:
-    @staticmethod
-    def __iter__():
-        return []
+    def map(self, f):
+        return f(self)
     def toSExp(self):
         tok = Token(unkpos, repr(self))
         return tok
@@ -158,10 +156,8 @@ class LamExp(AtomicExp):
         self.sym = 'lambda%d' % LamExp.n
         LamExp.n += 1
 
-    def __iter__(self):
-        lst = [v for v in self.vars]
-        lst.append(self.bodyExp)
-        return lst
+    def map(self, f):
+        return f(LamExp([v.map(f) for v in self.vars], self.bodyExp.map(f)))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -187,8 +183,8 @@ class AppExp:
         self.funcExp = funcExp
         self.argExps = argExps
 
-    def __iter__(self):
-        return self.tolist()
+    def map(self, f):
+        return f(AppExp(self.funcExp.map(f), *[exp.map(f) for exp in self.argExps]))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -215,8 +211,8 @@ class IfExp:
         self.thenExp = thenExp
         self.elseExp = elseExp
 
-    def __iter__(self):
-        return [self.condExp, self.thenExp, self.elseExp]
+    def map(self, f):
+        return f(IfExp(self.condExp.map(f), self.thenExp.map(f), self.elseExp.map(f)))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -247,10 +243,13 @@ class LetRecExp:
         self.bindings = bindings
         self.bodyExp = bodyExp
 
-    def __iter__(self):
-        lst = list(chain(self.bindings))
-        lst.append(self.bodyExp)
-        return lst
+    def map(self, f):
+        return f(
+            LetRecExp(
+                [(v.map(f), l.map(f)) for v, l in self.bindings],
+                self.bodyExp.map(f)
+                )
+            )
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -277,8 +276,8 @@ class BeginExp:
     def __init__(self, *exps):
         self.exps = exps
 
-    def __iter__(self):
-        return [e for e in self.exps]
+    def map(self, f):
+        return f(BeginExp(e.map(f) for e in self.exps))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -302,8 +301,8 @@ class SetExp:
         self.varExp = varExp
         self.exp = exp
 
-    def __iter__(self):
-        return [self.varExp, self.exp]
+    def map(self, f):
+        return f(SetExp(self.varExp.map(f), self.exp.map(f)))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -331,8 +330,14 @@ class SetThenExp:
         self.exp = exp
         self.thenExp = thenExp
 
-    def __iter__(self):
-        return [self.varExp, self.exp, self.thenExp]
+    def map(self, f):
+        return f(
+            SetThenExp(
+                self.varExp.map(f),
+                self.exp.map(f),
+                self.thenExp.map(f)
+                )
+            )
 
     def __repr__(self):
         pretty(self.toSExp())
