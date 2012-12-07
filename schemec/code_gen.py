@@ -33,6 +33,8 @@ class CodeGenerator():
             }
         self.retExp = LamExp([self.rv], self.rv)
         self.declareCode = ''
+        self.argVars = [VarExp('_args[{0}]'.format(i)) for i in range(10)]
+        self.ivars.update(self.argVars)
 
     """
     Translates the given CPS expression into C
@@ -52,6 +54,7 @@ class CodeGenerator():
             } schemetype;
             main()
             {
+            schemetype _args[10];
             ''')
         
         code = self.toC(exp, self.rv)
@@ -96,13 +99,20 @@ class CodeGenerator():
             return str(val)
         else:
             self.declareVar(assignTo)
-            if isinstance(exp, StrExp) or self.isStrVar(exp):
-                self.setStrVar(assignTo)
+            if isinstance(exp, VarExp):
+                return '{0} = {1};\n'.format(assignTo.name, exp.name)
+                #~ return dedent('''\
+                    #~ {0}.intVal = {1}.intVal;
+                    #~ strcpy({0}.strVal, {1}.strVal);
+                    #~ {0}.label = {1}.label;
+                #~ ''').format(assignTo.name, exp.name)
+            elif isinstance(exp, StrExp):
+                #~ self.setStrVar(assignTo)
                 return self.setStr(assignTo, val)
             else:
-                self.setIntVar(assignTo)
-                if assignTo in self.svars:
-                    self.svars.remove(assignTo)
+                #~ self.setIntVar(assignTo)
+                #~ if assignTo in self.svars:
+                    #~ self.svars.remove(assignTo)
                 return self.setInt(assignTo, val)
 
     def isStrVar(self, exp):
@@ -131,6 +141,7 @@ class CodeGenerator():
     @param val: the value to assign
     """
     def setStr(self, var, val):
+        #~ self.setStrVar(var)
         if var is self.rv:
             self.rvtype = 1
         end = '.strVal' if isinstance(val, VarExp) else ''
@@ -148,18 +159,38 @@ class CodeGenerator():
     """
     def lamToC(self, exp, assignTo):
         label = gensym('lrb_').name
+        self.declareVar(assignTo)
         code = '{0}.label = &&{1};\n'.format(assignTo.name, label)
         
         sym = gensym('lr_').name
-        code = 'goto {0};\n'.format(sym)
-        
+        code += 'goto {0};\n'.format(sym)
+        code += '{0}:\n'.format(label)
         #~ self.lambdaBindings[assignTo] = (label, exp.vars)
-        code += dedent('''\
-                {0}:
-                {1}
-                ''').format(label, self.toC(exp.bodyExp, self.tmpvar))
+        for i, var in enumerate(exp.vars):
+            self.declareVar(var)
+            code += self.toC(self.argVars[i], var)
+        
+        if exp.bodyExp == self.rv:
+            code += self.printReturn()
+        else:
+            code += self.toC(exp.bodyExp, self.tmpvar)
         code += '{0}:\n'.format(sym)
         return code
+    
+    def printReturn(self):
+        #~ if self.rvtype is 0:
+            #~ formStr = '%i'
+            #~ typeStr = 'intVal'
+        #~ else:
+            #~ formStr = '%s'
+            #~ typeStr = 'strVal'
+        #~ return ('printf(\"' + formStr + '\\n\", {0}.' + typeStr + ');\nreturn 0;\n').format(self.rv)
+        return dedent('''\
+            printf(\"integer return value: \\t%i\\n\", {0}.intVal);
+            printf(\"string return value: \\t%s\\n\", {0}.strVal);
+            printf(\"take your pick...\\n\");
+            return 0;
+        ''').format(self.rv)
 
     """
     Translates the given application expression into C such that the result of the
@@ -174,21 +205,14 @@ class CodeGenerator():
         if self.isPrimitive(exp.funcExp):
             return self.primToC(exp, assignTo)
         elif isinstance(exp.funcExp, VarExp):
-            # TODO: pass vars in an array
-            return self.argsToC(zip(vars, exp.argExps)) + dedent('''\
+            return self.argsToC(zip([self.argVars[i] for i in range(len(exp.argExps))], exp.argExps)) + dedent('''\
                     goto * {0}.label;
-                    ''').format(VarExp.name)
+                    ''').format(exp.funcExp.name)
             #~ funcExp = self.lambdaBindings[exp.funcExp]
         elif isinstance(exp.funcExp, LamExp):
             code = self.argsToC(zip(exp.funcExp.vars, exp.argExps))
             if exp.funcExp.bodyExp == self.rv:
-                if self.rvtype is 0:
-                    formStr = '%i'
-                    typeStr = 'intVal'
-                else:
-                    formStr = '%s'
-                    typeStr = 'strVal'
-                return code + ('printf(\"' + formStr + '\\n\", {0}.' + typeStr + ');\nreturn 0;\n').format(self.rv)
+                return self.printReturn()
             else:
                 return code + self.toC(exp.funcExp.bodyExp, assignTo)
         else:
@@ -286,7 +310,8 @@ class CodeGenerator():
     """
     def ifToC(self, exp, assignTo):
         self.declareVar(assignTo)
-        code = 'if ({0})\n{{{1}}}\nelse\n{{{2}}}\n'.format(self.toC(exp.condExp, None),
+        tmp = '.intVal' if isinstance(exp.condExp, VarExp) else ''
+        code = ('if ({0}' + tmp + ')\n{{{1}}}\nelse\n{{{2}}}\n').format(self.toC(exp.condExp, None),
                                                             self.toC(exp.thenExp, assignTo),
                                                             self.toC(exp.elseExp, assignTo))
         return code
@@ -300,9 +325,9 @@ if __name__ == '__main__':
                  #~ BoolExp(True),
                  #~ BoolExp(False))
 
-    #~ exp = IfExp(IfExp(BoolExp(True), BoolExp(False), BoolExp(True)), StrExp("bla"), StrExp("blubb"))
+    exp = IfExp(IfExp(BoolExp(True), BoolExp(False), BoolExp(True)), StrExp("bla"), StrExp("blubb"))
     #~ exp = AppExp(VarExp('+'), NumExp(1), NumExp(2))
-    exp = AppExp(VarExp('string-append'), StrExp("bla"), StrExp("blubb"))
+    #~ exp = AppExp(VarExp('string-append'), StrExp("bla"), StrExp("blubb"))
     #~ exp = AppExp(VarExp('+'), AppExp(LamExp([VarExp('g'), VarExp('h')], VarExp('g')), NumExp(3), NumExp(4)), NumExp(2))
 
     gen = CodeGenerator()
