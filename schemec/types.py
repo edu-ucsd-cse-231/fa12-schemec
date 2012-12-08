@@ -89,6 +89,12 @@ class VarExp(AtomicExp):
     def __repr__(self):
         return str(self.name)
 
+    def __hash__(self):
+        return hash(repr(self))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
 class NumExp(AtomicExp):
     """A number.
 
@@ -143,29 +149,37 @@ class LamExp(AtomicExp):
     n = 1
     """A lambda expression.
 
-    @type vars: A List of VarExps
-    @param vars: The formal parameters of the lambda
+    @type argExps: A List of VarExps
+    @param argExps: The formal parameters of the lambda
     @type bodyExp: Any Scheme expression
     @param bodyExp: The body of the lambda
     """
-    def __init__(self, vars, bodyExp):
-        if isinstance(vars, AppExp):
-            vars = vars.tolist()
-        self.vars = vars
+    def __init__(self, argExps, bodyExp):
+        if isinstance(argExps, AppExp):
+            argExps = argExps.tolist()
+        self.argExps = argExps
         self.bodyExp = bodyExp
-        self.sym = 'lambda%d' % LamExp.n
+        self.name = 'lambda%d' % LamExp.n
         LamExp.n += 1
 
     def map(self, f):
-        return f(LamExp([v.map(f) for v in self.vars], self.bodyExp.map(f)))
+        lam = LamExp([v.map(f) for v in self.argExps], self.bodyExp.map(f))
+        lam.name = self.name
+        return f(lam)
 
     def __repr__(self):
         return pretty(self.toSExp())
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     def toSExp(self):
         sexp = SExp(unkpos,
             Token(unkpos, 'lambda'),
-            SExp(unkpos, *[e.toSExp() for e in self.vars]),
+            SExp(unkpos, *[e.toSExp() for e in self.argExps]),
             self.bodyExp.toSExp()
             )
         return sexp

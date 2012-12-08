@@ -1,9 +1,6 @@
 from schemec.types import *
 
-__all__ = ['T_c', 'halt']
-
-
-halt = VarExp('halt')
+__all__ = ['T_c']
 
 
 ################################################################################
@@ -107,10 +104,10 @@ def M(exp):
     @type exp: AtomicExp
     """
     if isinstance(exp, LamExp):
-        vars = exp.vars
+        args = exp.argExps
         body = exp.bodyExp
         _k = gensym('$k')
-        return LamExp(vars + [_k],
+        return LamExp(args + [_k],
                       T_c(body, _k))
     elif isinstance(exp, AtomicExp):
         return exp
