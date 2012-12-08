@@ -159,7 +159,7 @@ class LamExp(AtomicExp):
             argExps = argExps.tolist()
         self.argExps = argExps
         self.bodyExp = bodyExp
-        self.name = 'lambda%d' % LamExp.n
+        self.name = 'lambda_%d' % LamExp.n
         LamExp.n += 1
 
     def map(self, f):
