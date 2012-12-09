@@ -195,7 +195,7 @@ class LambdaGenCpp:
                       {cls}({init_args});
                       ~{cls}();
                       void args({args});
-                      SCHEMETYPE_T operator()() const;
+                      SCHEMETYPE_T operator()();
                      private:
                       {priv}
                     }};''').format(
@@ -215,7 +215,7 @@ class LambdaGenCpp:
                       {args_ops}
                       __ready = true;
                     }}
-                    SCHEMETYPE_T {cls}::operator()() const {{
+                    SCHEMETYPE_T {cls}::operator()() {{
                       {decls}
                       {ops}
                       {body}
@@ -241,7 +241,7 @@ class LambdaGenCpp:
             class lambda_t {{
              public:
               {virtuals}
-              virtual SCHEMETYPE_T operator()() const;
+              virtual SCHEMETYPE_T operator()();
               operator bool() const;
              protected:
               bool __ready;
@@ -263,7 +263,7 @@ class LambdaGenCpp:
             for i in range(min_nargs, max_nargs + 1)
             )
         op += dedent('''\
-            SCHEMETYPE_T lambda_t::operator()() const {{
+            SCHEMETYPE_T lambda_t::operator()() {{
               printf("error: this should be impossible\\n");
               exit(-1);
             }}
