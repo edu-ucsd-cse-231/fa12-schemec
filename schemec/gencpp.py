@@ -33,8 +33,8 @@ __all__ = [
     'pretty_cpp'
     ]
 
-NUM, LAM, STR = 'NUM', 'LAM', 'STR'
-TYPES = [NUM, LAM, STR]
+LAM, NUM, STR = 'LAM', 'NUM', 'STR'
+TYPES = [LAM, NUM, STR]
 
 class NumPrimOps:
     binary_fmt = '{dst}->num = {lhs}->num {op} {rhs}->num;'
@@ -342,26 +342,27 @@ halt = Halt(
     [CppCode(VarExp, Halt.var.name, [])],
     CppCode(
         LamExp,
-        'schemetype_t()',
+        '_retval',
         [(
-            'int retval = 0;',
+            declare('_retval'),
             dedent('''\
+                _retval->type = {NUM};
+                _retval->num = 0;
                 switch({arg}->type) {{
-                 case {NUM}:
-                  printf("%ld\\n", {arg}->num);
-                  break;
                  case {LAM}:
                   printf("you want to return a lambda?! really?!\\n");
-                  retval = -1;
+                  _retval->num = -1;
+                  break;
+                 case {NUM}:
+                  printf("%ld\\n", {arg}->num);
                   break;
                  case {STR}:
                   printf("%s\\n", {arg}->str->c_str());
                   break;
                  default:
                   printf("error: but our number value is %ld\\n", {arg}->num);
-                  retval = -1;
-                }}
-                exit(retval);''').format(
+                  _retval->num = -1;
+                }}''').format(
                     arg=Halt.var.name,
                     NUM=NUM, LAM=LAM, STR=STR)
             )]
@@ -561,7 +562,7 @@ def gen_cpp(exp):
     main_decls, main_ops = body.decls_ops
     lambda_decls, lambda_ops = lambda_gen.decls_ops
 
-    next = gensym('_next');
+    next = gensym('_trampoline')
 
     # generate some C code!
     code = dedent('''\
@@ -581,8 +582,8 @@ def gen_cpp(exp):
         class schemetype {{
          public:
           union {{
-            long num;
             lambda_t lam;
+            long num;
             std::shared_ptr<std::string> str;
           }};
           type_t type;
@@ -592,19 +593,23 @@ def gen_cpp(exp):
         // lambda impl -------------------------------------------------------------------------------------
         {lambda_ops}
         // schemetype impl ---------------------------------------------------------------------------------
-        schemetype::schemetype() {{ }}
+        schemetype::schemetype() : lam(lambda_t()) {{ }}
         schemetype::~schemetype() {{
-          lam.reset();
-          str.reset();
+          if (type == {LAM}) {{
+            lam.reset();
+          }}
+          else if (type == {STR}) {{
+            str.reset();
+          }}
         }}
         // main --------------------------------------------------------------------------------------------
         int main() {{
-          {next_decl}
           {main_decls}
+          {next_decl}
           {main_ops}
           {next} = {body};
-          // next
-          while (true) {{
+          // trampoline
+          while ({next}->type == {LAM}) {{
             if (*({next}->lam)) {{
               {next} = std::move((*({next}->lam))());
             }}
@@ -613,17 +618,22 @@ def gen_cpp(exp):
               exit(-1);
             }}
           }}
-          return 0;
+          if ({next}->type != {NUM}) {{
+            printf("error: non-number type in return value\\n");
+            return -1;
+          }}
+          return {next}->num;
         }}
         ''').format(
             types=', '.join(TYPES),
             lambda_decls=lambda_decls,
             lambda_ops=lambda_ops,
-            next_decl=declare(next, False),
-            next=next,
             main_decls=main_decls,
+            next_decl=declare(next, False),
+            next=next.name,
             main_ops=main_ops,
-            body=str(body)
+            body=str(body),
+            LAM=LAM, NUM=NUM, STR=STR
             )
 
     return code

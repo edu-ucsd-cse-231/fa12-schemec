@@ -30,7 +30,7 @@ def main():
                     #f
                     (even? (- n 1))))))
       (even? 87))''')
-    e = evenodd # fac5 # evenodd
+    e = fac5 # evenodd
 #     print('; original')
 #     print(e)
 #     print('; parsed')
