@@ -1,9 +1,11 @@
 
 from collections import OrderedDict
-from functools import partial
+from random import choice
+from re import compile as re_compile
+from string import hexdigits
 from textwrap import dedent
 
-from schemec.types import (
+from schemec.typs import (
     AtomicExp,
     VarExp,
     NumExp,
@@ -20,7 +22,9 @@ from schemec.types import (
     BeginExp,
     SetExp,
     SetThenExp,
-    gensym
+    Token,
+    gensym,
+    unkpos,
     )
 
 __all__ = [
@@ -133,15 +137,51 @@ def unimplemented(exp):
 
 def compute_holes(rootExp):
     holes_dict = {}
-    def find_holes(holes, exp):
+    lams_dict = {}
+    # so we can print the original exp if we want
+    def find_lams(exp):
         if isinstance(exp, LamExp):
-            holes_dict[exp] = list(holes - set(exp.argExps))
-            holes -= set(exp.argExps)
+            lams_dict[exp] = exp
+        return exp
+    rootExp.map(find_lams)
+    # all the work
+    def find_holes(exp):
+        holes = set()
+        if isinstance(exp, Halt):
+            holes_dict[lams_dict[exp]] = list()
         elif isinstance(exp, VarExp):
             if not is_primop(exp.name):
                 holes.add(exp)
-        return exp
-    rootExp.map(partial(find_holes, set()))
+        elif isinstance(exp, LamExp):
+            holes |= exp.bodyExp
+            for arg in exp.argExps:
+                holes -= arg
+            holes_dict[lams_dict[exp]] = list(holes)
+        elif isinstance(exp, AtomicExp):
+            pass
+        elif isinstance(exp, AppExp):
+            holes |= exp.funcExp
+            for arg in exp.argExps:
+                holes |= arg
+        elif isinstance(exp, IfExp):
+            holes |= exp.condExp
+            holes |= exp.thenExp
+            holes |= exp.elseExp
+        elif isinstance(exp, LetRecExp):
+            holes |= exp.bodyExp
+            for var, val in exp.bindings:
+                holes |= val
+                holes -= var
+        elif isinstance(exp, BeginExp):
+            unimplemented(exp)
+        elif isinstance(exp, SetExp):
+            unimplemented(exp)
+        elif isinstance(exp, SetThenExp):
+            unimplemented(exp)
+        else:
+            unimplemented(exp)
+        return holes
+    rootExp.map(find_holes)
     return holes_dict
 
 class CppCode:
@@ -153,7 +193,7 @@ class CppCode:
         return self.code
     def __repr__(self):
         return self.code
-    def map(self, f):
+    def map(self, f, skip=True):
         return f(self)
     @property
     def decls_ops(self):
@@ -165,8 +205,10 @@ class CppCode:
             '\n'.join(d for d in decls if d),
             '\n'.join(o for o in ops if o)
             )
+    def toSExp(self):
+        return Token(unkpos, 'cpp')
 
-class LambdaGenCpp:
+class LamGenCpp:
     def __init__(self, exp):
         self.holes = compute_holes(exp)
         self._decls = OrderedDict()
@@ -177,55 +219,57 @@ class LambdaGenCpp:
             self.nargs.add(len(exp.argExps))
             holes = self.holes[exp]
             decls, ops = exp.bodyExp.decls_ops
-            init_args = ', '.join('SCHEMETYPE_T {0}'.format(str(hole)) for hole in holes)
-            priv = (
-                '\n  '.join('SCHEMETYPE_T {0};'.format(str(hole)) for hole in holes) +
-                '\n  ' +
-                '\n  '.join('SCHEMETYPE_T {0};'.format(str(arg)) for arg in exp.argExps)
+            init_args = ', '.join('schemetype_t {0}'.format(str(hole)) for hole in holes)
+            priv = '\n  '.join('schemetype_t {0};'.format(str(var)) for var in holes + exp.argExps)
+            destroy_ops = '\n  '.join('{0}.reset();'.format(str(var)) for var in holes + exp.argExps)
+            asmts_ = (
+                ['{0}({0})'.format(str(hole)) for hole in holes] +
+                ['{0}(schemetype_t())'.format(str(arg)) for arg in exp.argExps]
                 )
-            destroy_ops = (
-                '\n  '.join('{0}.reset();'.format(str(hole)) for hole in holes) +
-                '\n  ' +
-                '\n  '.join('{0}.reset();'.format(str(arg)) for arg in exp.argExps)
-                )
+            asmts = ', '.join(asmts_)
             self._decls[exp] = (
                 dedent('''\
-                    class {cls} : public lambda_t {{
+                    class {cls} : public lambda {{
                      public:
                       {cls}({init_args});
                       ~{cls}();
                       void args({args});
-                      SCHEMETYPE_T operator()() const;
+                      schemetype_t operator()();
                      private:
                       {priv}
                     }};''').format(
                         cls=exp.name,
                         init_args=init_args,
-                        args=', '.join('SCHEMETYPE_T' for _ in range(len(exp.argExps))),
+                        args=', '.join('schemetype_t' for _ in range(len(exp.argExps))),
                         priv=priv
                         ),
                 dedent('''\
-                    {cls}::{cls}({init_args}) : {asmts_env}, {asmts_args} {{
-                      __ready = false;
+                    {cls}::{cls}({init_args}) : {asmts} {{
+                      _ready = false;
                     }}
                     {cls}::~{cls}() {{
                       {destroy_ops}
                     }}
                     void {cls}::args({args}) {{
+                    #ifdef DEBUG
+                      printf("assigning arguments to {cls}\\n");
+                    #endif
                       {args_ops}
-                      __ready = true;
+                      _ready = true;
                     }}
-                    SCHEMETYPE_T {cls}::operator()() const {{
+                    schemetype_t {cls}::operator()() {{
                       {decls}
+                    #ifdef DEBUG
+                      printf("executing {cls}\\n");
+                    #endif
                       {ops}
                       {body}
                     }}''').format(
                         cls=exp.name,
                         init_args=init_args,
-                        asmts_env=', '.join('{0}({0})'.format(str(hole)) for hole in holes),
-                        asmts_args=', '.join('{0}(SCHEMETYPE_T())'.format(str(arg)) for arg in exp.argExps),
+                        asmts=asmts,
                         destroy_ops=destroy_ops,
-                        args=', '.join('SCHEMETYPE_T _{0}'.format(str(arg)) for arg in exp.argExps),
+                        args=', '.join('schemetype_t _{0}'.format(str(arg)) for arg in exp.argExps),
                         args_ops='\n  '.join('{0} = std::move(_{0});'.format(str(arg)) for arg in exp.argExps),
                         decls=decls,
                         ops=ops,
@@ -238,37 +282,38 @@ class LambdaGenCpp:
         min_nargs = min(self.nargs)
         max_nargs = max(self.nargs)
         decl = dedent('''\
-            class lambda_t {{
+            class lambda {{
              public:
               {virtuals}
-              virtual SCHEMETYPE_T operator()() const;
+              virtual schemetype_t operator()();
               operator bool() const;
              protected:
-              bool __ready;
+              bool _ready;
             }};
             ''').format(
                 virtuals='\n  '.join(
                     'virtual void args({0});'.format(
-                        ', '.join('SCHEMETYPE_T' for _ in range(i))
+                        ', '.join('schemetype_t' for _ in range(i))
                         )
                     for i in range(min_nargs, max_nargs + 1)
                     )
                 )
         op = ''.join(
             dedent('''\
-                void lambda_t::args({0}) {{
+                void lambda::args({0}) {{
                   printf("error: lambda called with an improper number of arguments\\n");
                   exit(-1);
-                }}''').format(', '.join('SCHEMETYPE_T _{0}'.format(j) for j in range(i)))
+                }}
+                ''').format(', '.join('schemetype_t _{0}'.format(j) for j in range(i)))
             for i in range(min_nargs, max_nargs + 1)
             )
         op += dedent('''\
-            SCHEMETYPE_T lambda_t::operator()() const {{
+            schemetype_t lambda::operator()() {{
               printf("error: this should be impossible\\n");
               exit(-1);
             }}
-            lambda_t::operator bool() const {{
-              return __ready;
+            lambda::operator bool() const {{
+              return _ready;
             }}
             ''')
         if len(self._decls):
@@ -281,42 +326,80 @@ class LambdaGenCpp:
             )
 
 def declare(var, construct=True):
-    return 'SCHEMETYPE_T {0}{1};'.format(
+    return 'schemetype_t {0}{1};'.format(
         var,
-        '(new schemetype_t)' if construct else '')
+        '(new schemetype)' if construct else '')
 
-_tmp = gensym('__halt_')
-halt = LamExp(
-    [CppCode(VarExp, _tmp.name, [])],
+class Halt(LamExp):
+    var = gensym('_halt')
+    def toSExp(self):
+        tok = Token(unkpos, 'halt')
+        return tok
+    def map(self, f, skip=True):
+        return f(self)
+
+halt = Halt(
+    [CppCode(VarExp, Halt.var.name, [])],
     CppCode(
         LamExp,
-        'SCHEMETYPE_T()',
+        'schemetype_t()',
         [(
             'int retval = 0;',
             dedent('''\
                 switch({arg}->type) {{
                  case {NUM}:
                   printf("%ld\\n", {arg}->num);
+                  break;
                  case {LAM}:
                   printf("you want to return a lambda?! really?!\\n");
+                  retval = -1;
+                  break;
                  case {STR}:
                   printf("%s\\n", {arg}->str->c_str());
+                  break;
                  default:
-                  printf("error\\n");
+                  printf("error: but our number value is %ld\\n", {arg}->num);
                   retval = -1;
                 }}
                 exit(retval);''').format(
-                    arg=_tmp.name,
+                    arg=Halt.var.name,
                     NUM=NUM, LAM=LAM, STR=STR)
             )]
         )
     )
-del _tmp
+
+def sanitize(exp, prefix_length=10):
+    re_safe = re_compile(r'[^a-zA-Z0-9_]+')
+
+    def rename_(var):
+        return VarExp('_{0}__{1}'.format(
+            ''.join(choice(hexdigits) for _ in range(prefix_length)),
+            re_safe.sub('', var.name)
+            ))
+
+    subs = {}
+    def sanitize_(exp):
+        if isinstance(exp, VarExp) and not is_primop(exp.name):
+            return subs[exp.name]
+        elif isinstance(exp, LamExp):
+            for arg in exp.argExps:
+                if isinstance(arg, VarExp):
+                    subs[arg.name] = rename_(arg)
+        elif isinstance(exp, LetRecExp):
+            for var, _ in exp.bindings:
+                if isinstance(var, VarExp):
+                    subs[var.name] = rename_(var)
+        return exp
+
+    return exp.map(sanitize_, skip=False)
 
 def gen_cpp(exp):
+
+    exp = sanitize(exp)
+
     # compute the holes at each LamExp
     holes = compute_holes(exp)
-    lambda_gen = LambdaGenCpp(exp)
+    lambda_gen = LamGenCpp(exp)
 
     # map function
     def to_cpp(exp):
@@ -329,15 +412,15 @@ def gen_cpp(exp):
         elif isinstance(exp, (NumExp, BoolExp, StrExp)):
             if isinstance(exp, NumExp):
                 val = str(exp.val)
-                sym = '__num_'
+                sym = '_num'
                 typ = NUM
             elif isinstance(exp, BoolExp):
                 val = '1' if exp.val else '0'
-                sym = '__bool_'
+                sym = '_bool'
                 typ = NUM
             elif isinstance(exp, StrExp):
                 val = '"{0}"'.format(exp.val)
-                sym = '__str_'
+                sym = '_str'
                 typ = STR
             else:
                 assert(0)
@@ -360,14 +443,17 @@ def gen_cpp(exp):
         elif isinstance(exp, LamExp):
             cls = lambda_gen[exp]
             # instantiate a temporary to fill with our lambda
-            tmp = gensym('__lam_')
+            tmp = gensym('_lam')
             decl = (
                 declare(tmp),
-                '{var}->lam = LAMBDA_T(new {cls}({holes}));'.format(
-                    var=tmp.name,
-                    cls=cls,
-                    holes=', '.join(hole.name for hole in holes[exp])
-                    )
+                dedent('''\
+                    {var}->type = {LAM};
+                    {var}->lam = lambda_t(new {cls}({holes}));''').format(
+                        var=tmp.name,
+                        cls=cls,
+                        holes=', '.join(hole.name for hole in holes[exp]),
+                        LAM=LAM
+                        )
                 )
             decls.append(decl)
             code = tmp.name
@@ -375,13 +461,13 @@ def gen_cpp(exp):
             for arg in exp.argExps:
                 decls.extend(arg.decls)
             decls.extend(exp.funcExp.decls)
-            tmp = gensym('__ret_')
+            tmp = gensym('_ret')
             func = str(exp.funcExp)
             if is_primop(func):
-                prim = gensym('__prim_')
+                prim = gensym('_prim')
                 typ, body = gen_primop(func, prim, *[str(arg) for arg in exp.argExps[:-1]])
                 decl = (
-                    declare(prim) + '\nSCHEMETYPE_T {0};'.format(tmp.name),
+                    declare(prim) + '\nschemetype_t {0};'.format(tmp.name),
                     dedent('''\
                         {prim}->type = {typ};
                         {body}
@@ -398,7 +484,7 @@ def gen_cpp(exp):
                 decls.append(decl)
             elif exp.funcExp.typ == VarExp:
                 decl = (
-                    'SCHEMETYPE_T {0};'.format(tmp.name),
+                    'schemetype_t {0};'.format(tmp.name),
                     dedent('''\
                         {func}->lam->args({args});
                         {var} = {func};''').format(
@@ -416,9 +502,9 @@ def gen_cpp(exp):
             decls.extend(exp.condExp.decls)
             then_decls, then_ops = exp.thenExp.decls_ops
             else_decls, else_ops = exp.elseExp.decls_ops
-            tmp = gensym('__ret_')
+            tmp = gensym('_ret')
             decl = (
-                'SCHEMETYPE_T {0};'.format(tmp.name),
+                'schemetype_t {0};'.format(tmp.name),
                 dedent('''\
                     if ({cond}->num) {{
                       {then_decls}
@@ -447,10 +533,13 @@ def gen_cpp(exp):
                 decls.extend(body.decls)
                 decl = (
                     declare(var),
-                    '{var} = std::move({body});'.format(
-                        var=str(var),
-                        body=str(body)
-                        )
+                    dedent('''\
+                        {var}->type = {LAM};
+                        {var}->lam = {body}->lam;''').format(
+                            var=str(var),
+                            body=str(body),
+                            LAM=LAM
+                            )
                     )
                 decls.append(decl)
             decls.extend(exp.bodyExp.decls)
@@ -472,40 +561,39 @@ def gen_cpp(exp):
     main_decls, main_ops = body.decls_ops
     lambda_decls, lambda_ops = lambda_gen.decls_ops
 
-    next = gensym('__trampoline_');
+    next = gensym('_next');
 
     # generate some C code!
     code = dedent('''\
-        #include <cassert>
         #include <cstdio>
         #include <cstdlib>
         #include <memory>
         #include <string>
         enum type_t {{ {types} }};
         // forward decls -----------------------------------------------------------------------------------
-        class lambda_t;
-        class schemetype_t;
-        #define LAMBDA_T std::shared_ptr<lambda_t>
-        #define SCHEMETYPE_T std::shared_ptr<schemetype_t>
-        // lambda_t decl -----------------------------------------------------------------------------------
+        class lambda;
+        class schemetype;
+        typedef std::shared_ptr<lambda> lambda_t;
+        typedef std::shared_ptr<schemetype> schemetype_t;
+        // lambda decl -------------------------------------------------------------------------------------
         {lambda_decls}
-         // schemetype_t decl -------------------------------------------------------------------------------
-        class schemetype_t {{
+        // schemetype decl ---------------------------------------------------------------------------------
+        class schemetype {{
          public:
           union {{
             long num;
-            LAMBDA_T lam;
+            lambda_t lam;
             std::shared_ptr<std::string> str;
-            type_t type;
           }};
-          schemetype_t();
-          ~schemetype_t();
+          type_t type;
+          schemetype();
+          ~schemetype();
         }};
-        // lambda_t impl -----------------------------------------------------------------------------------
+        // lambda impl -------------------------------------------------------------------------------------
         {lambda_ops}
-        // schemetype_t impl -------------------------------------------------------------------------------
-        schemetype_t::schemetype_t() {{ }}
-        schemetype_t::~schemetype_t() {{
+        // schemetype impl ---------------------------------------------------------------------------------
+        schemetype::schemetype() {{ }}
+        schemetype::~schemetype() {{
           lam.reset();
           str.reset();
         }}
@@ -517,11 +605,10 @@ def gen_cpp(exp):
           {next} = {body};
           // next
           while (true) {{
-            if ((*{next}->lam)) {{
-              {next} = std::move((*{next}->lam)());
+            if (*({next}->lam)) {{
+              {next} = std::move((*({next}->lam))());
             }}
             else {{
-              assert(0);
               printf("error: lambda called before providing arguments!\\n");
               exit(-1);
             }}
@@ -553,7 +640,9 @@ def pretty_cpp(code, nspace=2):
         if len(line) and line[0] == '}':
             indent -= 1
             j = 1
-        if ((len(line) >= 5 and line[:5].lower() == 'case ') or
+        if len(line) and line[0] == '#':
+            prefix = ''
+        elif ((len(line) >= 5 and line[:5].lower() == 'case ') or
             (len(line) >= 6 and line[:6].lower() == 'public'  and line[6] in TERMINATORS) or
             (len(line) >= 7 and line[:7].lower() == 'default' and line[7] in TERMINATORS) or
             (len(line) >= 7 and line[:7].lower() == 'private' and line[7] in TERMINATORS)):

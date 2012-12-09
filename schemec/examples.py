@@ -16,7 +16,7 @@ def main():
         (if (= x 0)
           1
           (* x (fact (- x 1)))))))
-      (fact 5))
+      (fact 12))
     ''')
     evenodd = dedent('''\
     (letrec ((even?
@@ -29,8 +29,8 @@ def main():
                 (if (zero? n)
                     #f
                     (even? (- n 1))))))
-      (even? 88))''')
-    e = fac5
+      (even? 87))''')
+    e = evenodd # fac5 # evenodd
 #     print('; original')
 #     print(e)
 #     print('; parsed')
