@@ -177,31 +177,56 @@ class LambdaGenCpp:
             self.nargs.add(len(exp.argExps))
             holes = self.holes[exp]
             decls, ops = exp.bodyExp.decls_ops
-            apply_args = ', '.join('SCHEMETYPE_T {0}'.format(str(arg)) for arg in exp.argExps)
+            init_args = ', '.join('SCHEMETYPE_T {0}'.format(str(hole)) for hole in holes)
+            priv = (
+                '\n  '.join('SCHEMETYPE_T {0};'.format(str(hole)) for hole in holes) +
+                '\n  ' +
+                '\n  '.join('SCHEMETYPE_T {0};'.format(str(arg)) for arg in exp.argExps)
+                )
+            destroy_ops = (
+                '\n  '.join('{0}.reset();'.format(str(hole)) for hole in holes) +
+                '\n  ' +
+                '\n  '.join('{0}.reset();'.format(str(arg)) for arg in exp.argExps)
+                )
             self._decls[exp] = (
                 dedent('''\
                     class {cls} : public lambda_t {{
                      public:
-                      {cls}({init_args}) : {init_asmts} {{ }}
-                      ~{cls}() {{ }};
-                      THUNK_T operator()({apply_args}) const;
+                      {cls}({init_args});
+                      ~{cls}();
+                      void args({args});
+                      SCHEMETYPE_T operator()() const;
                      private:
                       {priv}
                     }};''').format(
                         cls=exp.name,
-                        init_args=', '.join('SCHEMETYPE_T {0}'.format(hole.name) for hole in holes),
-                        init_asmts=', '.join('{0}({0})'.format(hole.name) for hole in holes),
-                        apply_args=apply_args,
-                        priv='\n  '.join('SCHEMETYPE_T {0};'.format(hole.name) for hole in holes),
+                        init_args=init_args,
+                        args=', '.join('SCHEMETYPE_T' for _ in range(len(exp.argExps))),
+                        priv=priv
                         ),
                 dedent('''\
-                    THUNK_T {cls}::operator()({apply_args}) const {{
+                    {cls}::{cls}({init_args}) : {asmts_env}, {asmts_args} {{
+                      __ready = false;
+                    }}
+                    {cls}::~{cls}() {{
+                      {destroy_ops}
+                    }}
+                    void {cls}::args({args}) {{
+                      {args_ops}
+                      __ready = true;
+                    }}
+                    SCHEMETYPE_T {cls}::operator()() const {{
                       {decls}
                       {ops}
                       {body}
                     }}''').format(
                         cls=exp.name,
-                        apply_args=apply_args,
+                        init_args=init_args,
+                        asmts_env=', '.join('{0}({0})'.format(str(hole)) for hole in holes),
+                        asmts_args=', '.join('{0}(SCHEMETYPE_T())'.format(str(arg)) for arg in exp.argExps),
+                        destroy_ops=destroy_ops,
+                        args=', '.join('SCHEMETYPE_T _{0}'.format(str(arg)) for arg in exp.argExps),
+                        args_ops='\n  '.join('{0} = std::move(_{0});'.format(str(arg)) for arg in exp.argExps),
                         decls=decls,
                         ops=ops,
                         body='return {0};'.format(str(exp.bodyExp))
@@ -216,10 +241,14 @@ class LambdaGenCpp:
             class lambda_t {{
              public:
               {virtuals}
+              virtual SCHEMETYPE_T operator()() const;
+              operator bool() const;
+             protected:
+              bool __ready;
             }};
             ''').format(
                 virtuals='\n  '.join(
-                    'THUNK_T operator()({0}) const;'.format(
+                    'virtual void args({0});'.format(
                         ', '.join('SCHEMETYPE_T' for _ in range(i))
                         )
                     for i in range(min_nargs, max_nargs + 1)
@@ -227,13 +256,21 @@ class LambdaGenCpp:
                 )
         op = ''.join(
             dedent('''\
-                THUNK_T lambda_t::operator()({0}) const {{
+                void lambda_t::args({0}) {{
                   printf("error: lambda called with an improper number of arguments\\n");
                   exit(-1);
-                }}
-                ''').format(', '.join('SCHEMETYPE_T _{0}'.format(j) for j in range(i)))
+                }}''').format(', '.join('SCHEMETYPE_T _{0}'.format(j) for j in range(i)))
             for i in range(min_nargs, max_nargs + 1)
             )
+        op += dedent('''\
+            SCHEMETYPE_T lambda_t::operator()() const {{
+              printf("error: this should be impossible\\n");
+              exit(-1);
+            }}
+            lambda_t::operator bool() const {{
+              return __ready;
+            }}
+            ''')
         if len(self._decls):
             decls, ops = zip(*self._decls.values())
         else:
@@ -253,7 +290,7 @@ halt = LamExp(
     [CppCode(VarExp, _tmp.name, [])],
     CppCode(
         LamExp,
-        'THUNK_T(nullptr)',
+        'SCHEMETYPE_T()',
         [(
             'int retval = 0;',
             dedent('''\
@@ -344,27 +381,31 @@ def gen_cpp(exp):
                 prim = gensym('__prim_')
                 typ, body = gen_primop(func, prim, *[str(arg) for arg in exp.argExps[:-1]])
                 decl = (
-                    declare(prim) + '\nTHUNK_T {0}(nullptr);'.format(tmp.name),
+                    declare(prim) + '\nSCHEMETYPE_T {0};'.format(tmp.name),
                     dedent('''\
                         {prim}->type = {typ};
                         {body}
-                        {var} = std::move((*{func}->lam)({prim}));''').format(
+                        {func}->lam->args({prim});
+                        {var} = {func};''').format(
                             prim=prim.name,
                             body=body,
                             typ=typ,
                             var=tmp.name,
-                            func=str(exp.argExps[-1])
+                            func=str(exp.argExps[-1]),
+                            LAM=LAM
                             )
                     )
                 decls.append(decl)
             elif exp.funcExp.typ == VarExp:
                 decl = (
-                    'THUNK_T {0}(nullptr);'.format(tmp.name),
-                    '{var} = std::move((*{func}->lam)({args}));'.format(
-                            var=tmp.name,
+                    'SCHEMETYPE_T {0};'.format(tmp.name),
+                    dedent('''\
+                        {func}->lam->args({args});
+                        {var} = {func};''').format(
                             func=str(exp.funcExp),
-                            narg=len(exp.argExps),
-                            args=', '.join(str(arg) for arg in exp.argExps)
+                            args=', '.join(str(arg) for arg in exp.argExps),
+                            var=tmp.name,
+                            LAM=LAM
                             )
                     )
                 decls.append(decl)
@@ -377,7 +418,7 @@ def gen_cpp(exp):
             else_decls, else_ops = exp.elseExp.decls_ops
             tmp = gensym('__ret_')
             decl = (
-                'THUNK_T {0}(nullptr);'.format(tmp.name),
+                'SCHEMETYPE_T {0};'.format(tmp.name),
                 dedent('''\
                     if ({cond}->num) {{
                       {then_decls}
@@ -431,8 +472,11 @@ def gen_cpp(exp):
     main_decls, main_ops = body.decls_ops
     lambda_decls, lambda_ops = lambda_gen.decls_ops
 
+    next = gensym('__trampoline_');
+
     # generate some C code!
     code = dedent('''\
+        #include <cassert>
         #include <cstdio>
         #include <cstdlib>
         #include <memory>
@@ -441,10 +485,8 @@ def gen_cpp(exp):
         // forward decls -----------------------------------------------------------------------------------
         class lambda_t;
         class schemetype_t;
-        class thunk_t;
         #define LAMBDA_T std::shared_ptr<lambda_t>
         #define SCHEMETYPE_T std::shared_ptr<schemetype_t>
-        #define THUNK_T std::unique_ptr<thunk_t>
         // lambda_t decl -----------------------------------------------------------------------------------
         {lambda_decls}
          // schemetype_t decl -------------------------------------------------------------------------------
@@ -459,15 +501,6 @@ def gen_cpp(exp):
           schemetype_t();
           ~schemetype_t();
         }};
-       // thunk_t decl ------------------------------------------------------------------------------------
-        class thunk_t {{
-         public:
-          thunk_t(LAMBDA_T);
-          ~thunk_t();
-          THUNK_T operator()() const;
-         private:
-          LAMBDA_T next;
-        }};
         // lambda_t impl -----------------------------------------------------------------------------------
         {lambda_ops}
         // schemetype_t impl -------------------------------------------------------------------------------
@@ -476,17 +509,22 @@ def gen_cpp(exp):
           lam.reset();
           str.reset();
         }}
-        // thunk_t impl ------------------------------------------------------------------------------------
-        thunk_t::thunk_t(LAMBDA_T next) : next(next) {{ }}
-        thunk_t::~thunk_t() {{ next.reset(); }}
-        THUNK_T thunk_t::operator()() const {{ return (*next)(); }}
         // main --------------------------------------------------------------------------------------------
         int main() {{
+          {next_decl}
           {main_decls}
           {main_ops}
-          // trampoline
+          {next} = {body};
+          // next
           while (true) {{
-            {body} = std::move((*{body})());
+            if ((*{next}->lam)) {{
+              {next} = std::move((*{next}->lam)());
+            }}
+            else {{
+              assert(0);
+              printf("error: lambda called before providing arguments!\\n");
+              exit(-1);
+            }}
           }}
           return 0;
         }}
@@ -494,6 +532,8 @@ def gen_cpp(exp):
             types=', '.join(TYPES),
             lambda_decls=lambda_decls,
             lambda_ops=lambda_ops,
+            next_decl=declare(next, False),
+            next=next,
             main_decls=main_decls,
             main_ops=main_ops,
             body=str(body)
