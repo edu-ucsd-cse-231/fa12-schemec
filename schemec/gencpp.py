@@ -212,11 +212,17 @@ class LambdaGenCpp:
                       {destroy_ops}
                     }}
                     void {cls}::args({args}) {{
+                    #ifdef DEBUG
+                      printf("assigning arguments to {cls}\\n");
+                    #endif
                       {args_ops}
                       __ready = true;
                     }}
                     SCHEMETYPE_T {cls}::operator()() {{
                       {decls}
+                    #ifdef DEBUG
+                      printf("executing {cls}\\n");
+                    #endif
                       {ops}
                       {body}
                     }}''').format(
@@ -553,7 +559,9 @@ def pretty_cpp(code, nspace=2):
         if len(line) and line[0] == '}':
             indent -= 1
             j = 1
-        if ((len(line) >= 5 and line[:5].lower() == 'case ') or
+        if len(line) and line[0] == '#':
+            prefix = ''
+        elif ((len(line) >= 5 and line[:5].lower() == 'case ') or
             (len(line) >= 6 and line[:6].lower() == 'public'  and line[6] in TERMINATORS) or
             (len(line) >= 7 and line[:7].lower() == 'default' and line[7] in TERMINATORS) or
             (len(line) >= 7 and line[:7].lower() == 'private' and line[7] in TERMINATORS)):
