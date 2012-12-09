@@ -1,6 +1,6 @@
 import re
 
-from schemec.types import (
+from schemec.typs import (
     SExp,
     Token,
     BoolExp,

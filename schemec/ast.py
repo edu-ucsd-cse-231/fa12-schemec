@@ -7,7 +7,7 @@ from schemec.grammar import (
     val_specs
     )
 from schemec.sexp import SExp, parse
-from schemec.types import (
+from schemec.typs import (
     VarExp,
     AppExp,
     )

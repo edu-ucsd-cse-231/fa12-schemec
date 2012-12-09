@@ -1,4 +1,4 @@
-from schemec.types import *
+from schemec.typs import *
 
 __all__ = ['T_c']
 

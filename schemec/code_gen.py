@@ -3,7 +3,7 @@ from functools import partial
 from textwrap import dedent
 
 from schemec.cps import T_c
-from schemec.types import (
+from schemec.typs import (
     AppExp,
     VarExp,
     AtomicExp,

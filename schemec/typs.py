@@ -21,7 +21,8 @@ __all__ = [
     'BeginExp',
     'SetExp',
     'SetThenExp',
-    'gensym'
+    'gensym',
+    'unkpos'
     ]
 
 class GenSym:
@@ -71,7 +72,7 @@ unkpos = Pos(-1, -1)
 
 ## Atomic Expressions
 class AtomicExp:
-    def map(self, f):
+    def map(self, f, skip=True):
         return f(self)
     def toSExp(self):
         tok = Token(unkpos, repr(self))
@@ -162,8 +163,10 @@ class LamExp(AtomicExp):
         self.name = 'lambda_%d' % LamExp.n
         LamExp.n += 1
 
-    def map(self, f):
-        lam = LamExp([v.map(f) for v in self.argExps], self.bodyExp.map(f))
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
+        lam = LamExp([v.map(f, skip) for v in self.argExps], self.bodyExp.map(f, skip))
         lam.name = self.name
         return f(lam)
 
@@ -197,8 +200,15 @@ class AppExp:
         self.funcExp = funcExp
         self.argExps = argExps
 
-    def map(self, f):
-        return f(AppExp(self.funcExp.map(f), *[exp.map(f) for exp in self.argExps]))
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
+        return f(
+            AppExp(
+                self.funcExp.map(f, skip),
+                *[exp.map(f, skip) for exp in self.argExps]
+                )
+            )
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -225,8 +235,16 @@ class IfExp:
         self.thenExp = thenExp
         self.elseExp = elseExp
 
-    def map(self, f):
-        return f(IfExp(self.condExp.map(f), self.thenExp.map(f), self.elseExp.map(f)))
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
+        return f(
+            IfExp(
+                self.condExp.map(f, skip),
+                self.thenExp.map(f, skip),
+                self.elseExp.map(f, skip)
+                )
+            )
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -257,11 +275,13 @@ class LetRecExp:
         self.bindings = bindings
         self.bodyExp = bodyExp
 
-    def map(self, f):
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
         return f(
             LetRecExp(
-                [(v.map(f), l.map(f)) for v, l in self.bindings],
-                self.bodyExp.map(f)
+                [(v.map(f, skip), l.map(f, skip)) for v, l in self.bindings],
+                self.bodyExp.map(f, skip)
                 )
             )
 
@@ -290,8 +310,12 @@ class BeginExp:
     def __init__(self, *exps):
         self.exps = exps
 
-    def map(self, f):
-        return f(BeginExp(e.map(f) for e in self.exps))
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
+        return f(
+            BeginExp(e.map(f, skip) for e in self.exps)
+            )
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -315,8 +339,15 @@ class SetExp:
         self.varExp = varExp
         self.exp = exp
 
-    def map(self, f):
-        return f(SetExp(self.varExp.map(f), self.exp.map(f)))
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
+        return f(
+            SetExp(
+                self.varExp.map(f, skip),
+                self.exp.map(f, skip)
+                )
+            )
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -344,12 +375,14 @@ class SetThenExp:
         self.exp = exp
         self.thenExp = thenExp
 
-    def map(self, f):
+    def map(self, f, skip=True):
+        if not skip:
+            f(self)
         return f(
             SetThenExp(
-                self.varExp.map(f),
-                self.exp.map(f),
-                self.thenExp.map(f)
+                self.varExp.map(f, skip),
+                self.exp.map(f, skip),
+                self.thenExp.map(f, skip)
                 )
             )
 

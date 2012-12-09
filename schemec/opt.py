@@ -1,7 +1,7 @@
 
 from functools import partial
 
-from schemec.types import (
+from schemec.typs import (
     AtomicExp,
     VarExp,
     AppExp,
