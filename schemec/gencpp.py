@@ -453,10 +453,13 @@ def gen_cpp(exp):
                 decls.extend(body.decls)
                 decl = (
                     declare(var),
-                    '{var} = std::move({body});'.format(
-                        var=str(var),
-                        body=str(body)
-                        )
+                    dedent('''\
+                        {var}->type = {LAM};
+                        {var}->lam = {body}->lam;''').format(
+                            var=str(var),
+                            body=str(body),
+                            LAM=LAM
+                            )
                     )
                 decls.append(decl)
             decls.extend(exp.bodyExp.decls)
@@ -523,8 +526,8 @@ def gen_cpp(exp):
           {next} = {body};
           // next
           while (true) {{
-            if ((*{next}->lam)) {{
-              {next} = std::move((*{next}->lam)());
+            if (*({next}->lam)) {{
+              {next} = std::move((*({next}->lam))());
             }}
             else {{
               assert(0);
