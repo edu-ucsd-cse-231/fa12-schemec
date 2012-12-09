@@ -2,8 +2,9 @@ from textwrap import dedent
 
 from schemec.ast import ast
 from schemec.sexp import parse, pretty
-from schemec.cps import T_c, halt
-from schemec.code_gen import CodeGenerator
+from schemec.cps import T_c
+from schemec.gencpp import halt, gen_cpp, pretty_cpp
+from schemec.opt import optimize
 
 def main():
     fac5 = dedent('''\
@@ -30,19 +31,20 @@ def main():
                     (even? (- n 1))))))
       (even? 88))''')
     e = fac5
-    print('; original')
-    print(e)
-    print('; parsed')
-    e_parsed = parse(e)
-    print(pretty(e_parsed))
-    print('; ast')
+#     print('; original')
+#     print(e)
+#     print('; parsed')
+#     e_parsed = parse(e)
+#     print(pretty(e_parsed))
+#     print('; ast')
     e_ast = ast(e)
-    print(e_ast)
-    print('; cps ast')
-    e_cps = T_c(e_ast, halt)
-    print(e_cps)
-    gen = CodeGenerator()
-    print(gen.code_gen(T_c(e_ast, gen.retExp)))
+#     print(e_ast)
+#     print('; cps ast')
+    e_cps = optimize(T_c(e_ast, halt))
+#     print(e_cps)
+#     print('; C code')
+#     print('; cps ast for codegen')
+    print(pretty_cpp(gen_cpp(e_cps), 4))
     return 0
 
 if __name__ == '__main__':

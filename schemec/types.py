@@ -1,3 +1,4 @@
+
 from collections import namedtuple
 
 __all__ = [
@@ -26,7 +27,7 @@ __all__ = [
 class GenSym:
     n = 1
     @classmethod
-    def __call__(cls, sym):
+    def __call__(cls, sym=''):
         sym += str(cls.n)
         cls.n += 1
         return VarExp(sym)
@@ -70,6 +71,8 @@ unkpos = Pos(-1, -1)
 
 ## Atomic Expressions
 class AtomicExp:
+    def map(self, f):
+        return f(self)
     def toSExp(self):
         tok = Token(unkpos, repr(self))
         return tok
@@ -85,6 +88,12 @@ class VarExp(AtomicExp):
 
     def __repr__(self):
         return str(self.name)
+
+    def __hash__(self):
+        return hash(repr(self))
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
 
 class NumExp(AtomicExp):
     """A number.
@@ -137,27 +146,40 @@ class StrExp(AtomicExp):
         return '"{0}"'.format(self.val)
 
 class LamExp(AtomicExp):
+    n = 1
     """A lambda expression.
 
-    @type vars: A List of VarExps
-    @param vars: The formal parameters of the lambda
+    @type argExps: A List of VarExps
+    @param argExps: The formal parameters of the lambda
     @type bodyExp: Any Scheme expression
     @param bodyExp: The body of the lambda
     """
-    def __init__(self, vars, bodyExp):
-        if isinstance(vars, AppExp):
-            vars = vars.tolist()
-        self.vars = vars
+    def __init__(self, argExps, bodyExp):
+        if isinstance(argExps, AppExp):
+            argExps = argExps.tolist()
+        self.argExps = argExps
         self.bodyExp = bodyExp
-        self.sym = gensym('l_')
+        self.name = 'lambda_%d' % LamExp.n
+        LamExp.n += 1
+
+    def map(self, f):
+        lam = LamExp([v.map(f) for v in self.argExps], self.bodyExp.map(f))
+        lam.name = self.name
+        return f(lam)
 
     def __repr__(self):
         return pretty(self.toSExp())
 
+    def __hash__(self):
+        return hash(self.name)
+
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
     def toSExp(self):
         sexp = SExp(unkpos,
             Token(unkpos, 'lambda'),
-            SExp(unkpos, *[e.toSExp() for e in self.vars]),
+            SExp(unkpos, *[e.toSExp() for e in self.argExps]),
             self.bodyExp.toSExp()
             )
         return sexp
@@ -174,6 +196,9 @@ class AppExp:
     def __init__(self, funcExp, *argExps):
         self.funcExp = funcExp
         self.argExps = argExps
+
+    def map(self, f):
+        return f(AppExp(self.funcExp.map(f), *[exp.map(f) for exp in self.argExps]))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -199,6 +224,9 @@ class IfExp:
         self.condExp = condExp
         self.thenExp = thenExp
         self.elseExp = elseExp
+
+    def map(self, f):
+        return f(IfExp(self.condExp.map(f), self.thenExp.map(f), self.elseExp.map(f)))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -229,6 +257,14 @@ class LetRecExp:
         self.bindings = bindings
         self.bodyExp = bodyExp
 
+    def map(self, f):
+        return f(
+            LetRecExp(
+                [(v.map(f), l.map(f)) for v, l in self.bindings],
+                self.bodyExp.map(f)
+                )
+            )
+
     def __repr__(self):
         return pretty(self.toSExp())
 
@@ -254,6 +290,9 @@ class BeginExp:
     def __init__(self, *exps):
         self.exps = exps
 
+    def map(self, f):
+        return f(BeginExp(e.map(f) for e in self.exps))
+
     def __repr__(self):
         return pretty(self.toSExp())
 
@@ -275,6 +314,9 @@ class SetExp:
     def __init__(self, varExp, exp):
         self.varExp = varExp
         self.exp = exp
+
+    def map(self, f):
+        return f(SetExp(self.varExp.map(f), self.exp.map(f)))
 
     def __repr__(self):
         return pretty(self.toSExp())
@@ -301,6 +343,15 @@ class SetThenExp:
         self.varExp = varExp
         self.exp = exp
         self.thenExp = thenExp
+
+    def map(self, f):
+        return f(
+            SetThenExp(
+                self.varExp.map(f),
+                self.exp.map(f),
+                self.thenExp.map(f)
+                )
+            )
 
     def __repr__(self):
         pretty(self.toSExp())
